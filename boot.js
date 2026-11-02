@@ -83,31 +83,37 @@ async function loadData() {
 function gEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // 계정 연결 — 학원 웹사이트와 같은 순서(결정 D-432 · D-449): 이름 · 학생 전화번호 · 학부모 전화번호
-function linkScreen(msg) {
+function linkScreen(msg, vals, askDesk) {
+  vals = vals || {};
   showGate(`<p><b>계정 연결하기</b></p>
     <p class="gatesub">출석부에 있는 정보로 학원생을 확인합니다.</p>
     ${msg ? `<p class="gateerr">${msg}</p>` : ''}
-    <input class="gatein" id="lkName" placeholder="학생 이름" autocomplete="off">
-    <input class="gatein" id="lkStudent" placeholder="학생 전화번호 (없으면 비워 두세요)" inputmode="tel" autocomplete="off">
-    <input class="gatein" id="lkParent" placeholder="학부모 전화번호" inputmode="tel" autocomplete="off">
+    <input class="gatein" id="lkName" placeholder="학생 이름" autocomplete="off" value="${gEsc(vals.name)}">
+    <input class="gatein" id="lkStudent" placeholder="학생 전화번호 (없으면 비워 두세요)" inputmode="tel" autocomplete="off" value="${gEsc(vals.student)}">
+    <input class="gatein" id="lkParent" placeholder="학부모 전화번호" inputmode="tel" autocomplete="off" value="${gEsc(vals.parent)}">
     <button class="gatebtn" id="lkGo">연결하기</button>
+    ${askDesk ? `<button class="gatebtn gatesec" id="lkDesk">${askDesk}</button>` : ''}
     <button class="gatebtn gatesec" id="logout">로그아웃</button>`);
   document.getElementById('logout').onclick = async () => { await sb.auth.signOut(); loginScreen(); };
-  document.getElementById('lkGo').onclick = async e => {
-    e.target.disabled = true;
-    const { data, error } = await sb.rpc('link_account', {
-      p_name: document.getElementById('lkName').value,
-      p_student_phone: document.getElementById('lkStudent').value,
-      p_parent_phone: document.getElementById('lkParent').value });
-    if (error) return linkScreen('연결하지 못했습니다. 잠시 뒤 다시 해 주세요.');
-    if (data.result === 'invalid') return linkScreen('이름과 학부모 전화번호를 넣어 주세요.');
+  const send = async request => {
+    const v = { name: document.getElementById('lkName').value, student: document.getElementById('lkStudent').value, parent: document.getElementById('lkParent').value };
+    const { data, error } = await sb.rpc('link_account', { p_name: v.name, p_student_phone: v.student, p_parent_phone: v.parent, p_request: request });
+    if (error) return linkScreen('연결하지 못했습니다. 잠시 뒤 다시 해 주세요.', v);
+    const r = data.result;
+    if (r === 'invalid') return linkScreen('이름과 학부모 전화번호를 넣어 주세요.', v);
+    if (r === 'not_enrolled') return linkScreen('재학 중인 학생만 쓸 수 있습니다. 궁금한 점은 학원 데스크에 문의해 주세요.', v);
+    if (r === 'nomatch') return linkScreen('출석부와 맞지 않습니다. 이름이나 전화번호를 잘못 입력했는지 확인해 주세요. 그래도 안 되면 아래 단추를 눌러 주세요.', v, '데스크에 계정 확인 요청하기');
+    if (r === 'taken') return linkScreen('이 학생은 이미 다른 구글 계정으로 연결되어 있습니다. 전에 쓰던 구글 계정으로 로그인해 주세요. 계정을 바꾸려면 아래 단추를 눌러 주세요.', v, '데스크에 계정 변경 요청하기');
     location.reload();
   };
+  document.getElementById('lkGo').onclick = () => send(false);
+  const d = document.getElementById('lkDesk');
+  if (d) d.onclick = () => send(true);
 }
 
 function pendingScreen() {
-  showGate(`<p><b>원장 승인을 기다리는 중입니다.</b></p>
-    <p class="gatesub">입력한 정보가 출석부와 바로 맞지 않았습니다. 승인되면 이 화면을 새로 고침하세요. 잘못 입력했다면 다시 입력할 수 있습니다.</p>
+  showGate(`<p><b>데스크 확인을 기다리는 중입니다.</b></p>
+    <p class="gatesub">확인이 끝나면 이 화면을 새로 고침하세요. 잘못 입력했다면 다시 입력할 수 있습니다.</p>
     <button class="gatebtn" id="lkAgain">다시 입력하기</button>
     <button class="gatebtn gatesec" id="logout">로그아웃</button>`);
   document.getElementById('lkAgain').onclick = () => linkScreen();
@@ -132,7 +138,7 @@ async function adminScreen(msg) {
   gate.querySelectorAll('[data-ok]').forEach(b => b.onclick = async () => {
     const id = +b.dataset.ok;
     const { error: er } = await sb.rpc('admin_approve', { p_request: id, p_student_no: document.getElementById('no' + id).value });
-    adminScreen(er ? (/already linked/.test(er.message) ? '그 학생번호는 이미 다른 계정에 연결되어 있습니다.' : '승인하지 못했습니다.') : '');
+    adminScreen(er ? '승인하지 못했습니다.' : '');
   });
   gate.querySelectorAll('[data-no]').forEach(b => b.onclick = async () => { await sb.rpc('admin_reject', { p_request: +b.dataset.no }); adminScreen(); });
   gate.querySelectorAll('[data-acc]').forEach(b => b.onclick = async () => { await sb.rpc('admin_set_access', { p_user: b.dataset.acc, p_on: b.dataset.on === 'true' }); adminScreen(); });

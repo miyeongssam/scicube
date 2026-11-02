@@ -4,9 +4,9 @@ const byId = Object.fromEntries(Q.map(q => [q.id, q]));
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const view = document.getElementById('view'), panel = document.getElementById('panel');
 
-// 푼 결과는 이 기기에만 남는다(없어도 화면은 그대로 동작)
+// 푼 결과는 기기에 먼저 남기고 서버로 보낸다(sync.js)
 function loadSet(k){ try { return new Set(JSON.parse(localStorage.getItem(k) || '[]')); } catch(e){ return new Set(); } }
-function saveSet(k, s){ try { localStorage.setItem(k, JSON.stringify([...s])); } catch(e){} }
+function saveSet(k, s){ try { localStorage.setItem(k, JSON.stringify([...s])); } catch(e){} window.scSync.set(k, s); }
 // 선 아이콘(알렌처럼 32×32 테두리 단추 안에 18px)
 const sv = d => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const ICON = {
@@ -24,11 +24,11 @@ const ICON = {
 // 고른 답(정답 확인 전) — 답안지에 바로 보이도록 따로 남긴다
 function loadPick(){ try { return JSON.parse(localStorage.getItem('sc.pick') || '{}'); } catch(e){ return {}; } }
 function savePick(id, v){ const p = loadPick(); p[id] = v; try { localStorage.setItem('sc.pick', JSON.stringify(p)); } catch(e){} }
-function clearRes(id){ const r = loadRes(); delete r[id]; const p = loadPick(); delete p[id];
+function clearRes(id){ window.scSync.cleared(id); const r = loadRes(); delete r[id]; const p = loadPick(); delete p[id];
   try { localStorage.setItem('sc.res', JSON.stringify(r)); localStorage.setItem('sc.pick', JSON.stringify(p)); } catch(e){} }
-// 풀이 기록: 한 번 풀 때마다 한 줄(서버가 생기면 그대로 보내 정답률 · 선지별 비율 · 평균 시간을 계산한다)
+// 풀이 기록: 한 번 풀 때마다 한 줄 → 서버로 보낸다(정답률 · 평균 시간은 서버에서 계산)
 function loadAttempts(){ try { return JSON.parse(localStorage.getItem('sc.attempts') || '[]'); } catch(e){ return []; } }
-function logAttempt(a){ const l = loadAttempts(); l.push(Object.assign({날짜: new Date().toISOString()}, a)); try { localStorage.setItem('sc.attempts', JSON.stringify(l)); } catch(e){} }
+function logAttempt(a){ const l = loadAttempts(); l.push(Object.assign({id: crypto.randomUUID(), 날짜: new Date().toISOString()}, a)); try { localStorage.setItem('sc.attempts', JSON.stringify(l)); } catch(e){} window.scSync.attempt(); }
 function loadRes(){ try { return JSON.parse(localStorage.getItem('sc.res') || '{}'); } catch(e){ return {}; } }
 function saveRes(id, v){ const r = loadRes(); r[id] = v; try { localStorage.setItem('sc.res', JSON.stringify(r)); } catch(e){} }
 
@@ -92,7 +92,7 @@ function home(tab){
     }).join('') + `</div>`;
   }
   view.innerHTML = `<h1>진화와 생물다양성</h1><div class="sub">통합과학 · 문제 ${Q.length} · 개념 카드 ${Object.keys(C).length} · 푼 문제 ${done}</div>
-    <div class="tabs"><a class="tab ${tab !== '개념' ? 'on' : ''}" href="#/">문제</a><a class="tab ${tab === '개념' ? 'on' : ''}" href="#/목록/개념">개념 카드</a></div>${body}`;
+    <div class="tabs"><a class="tab ${tab !== '개념' ? 'on' : ''}" href="#/">문제</a><a class="tab ${tab === '개념' ? 'on' : ''}" href="#/목록/개념">개념 카드</a><a class="tab" href="#/시험">시험</a></div>${body}`;
   const f = document.getElementById('find');
   if (f) f.oninput = () => document.querySelectorAll('.chip').forEach(ch => ch.style.display = ch.dataset.k.includes(f.value.trim()) ? '' : 'none');
 }
@@ -181,15 +181,17 @@ function problem(id){
       document.getElementById('result').innerHTML = (ok ? '정답입니다.' : '오답입니다.') +
         (ok && outCorrect ? '<span class="tag" title="처음에 오답이라고 지웠던 선지가 정답이었습니다">지웠던 선지 → 정답</span>' : '');
       const mine = loadAttempts().filter(a => a['문항'] === id), last = loadRes()[id] || {};
-      document.getElementById('stat').innerHTML = `<div>정답률 <b>—</b></div><div>누적 풀이 <b>—</b></div><div>평균 풀이 시간 <b>—</b> / 나의 풀이 시간 <b>${last.secs != null ? last.secs + '초' : '—'}</b></div>`
-        + `<div class="sub" style="flex-basis:100%">이 기기에서 이 문제를 푼 횟수 ${mine.length}번 · 정답률 · 누적 · 평균은 학생 기록이 서버에 모이면 보입니다.</div>`;
+      document.getElementById('stat').innerHTML = `<div>정답률 <b id="stR">—</b></div><div>누적 풀이 <b id="stN">—</b></div><div>평균 풀이 시간 <b id="stS">—</b> / 나의 풀이 시간 <b>${last.secs != null ? last.secs + '초' : '—'}</b></div>`
+        + `<div class="sub" style="flex-basis:100%">내가 이 문제를 푼 횟수 ${mine.length}번</div>`;
+      setTimeout(() => window.scSync.stats(id).then(s => { if (!s || !document.getElementById('stR')) return;
+        document.getElementById('stR').textContent = s.rate == null ? '—' : s.rate + '%'; document.getElementById('stN').textContent = s.count + '번'; document.getElementById('stS').textContent = s.seconds == null ? '—' : s.seconds + '초'; }), 800);
       check.innerHTML = `<button class="btn btn-s" id="again">다시 풀기</button>`;
       document.getElementById('again').onclick = () => { document.body.classList.remove('done'); sel = 0; Object.keys(out).forEach(k => delete out[k]); Object.keys(bogi).forEach(b => delete bogi[b]); outCorrect = false; clearRes(id); paint(); };
     } else {
       check.innerHTML = `<button class="btn btn-p" id="go" ${sel ? '' : 'disabled'}>정답 확인</button>`;
       document.getElementById('go').onclick = () => { if (!sel) return; const secs = Math.round((Date.now() - t0) / 1000);
         document.body.classList.add('done'); saveRes(id, {sel, ok: sel === q['정답'], out, bogi, outCorrect, secs});
-        logAttempt({문항: id, 고른답: sel, 정답: q['정답'], 맞음: sel === q['정답'], 초: secs, 보기표시: bogi, 선지표시: out}); paint(); };
+        logAttempt({문항: id, 고른답: sel, 정답: q['정답'], 맞음: sel === q['정답'], 초: secs, 보기표시: bogi, 선지표시: out, 지운정답: outCorrect}); paint(); };
     }
   }
   chs.forEach(b => b.onclick = e => {
@@ -284,7 +286,7 @@ function openMemo(id){
   let hi = '#FFF3A3', fc = '#E5484D', timer;
   const count = () => cnt.textContent = String(m.innerText.trim().length).padStart(4, '0') + ' / 10000자';
   const save = () => { count(); clearTimeout(timer); timer = setTimeout(() => {
-    try { localStorage.setItem(memoKey(id), m.innerHTML); saveTxt.textContent = '저장됨 ✓'; } catch(e){ saveTxt.textContent = '이 브라우저는 저장을 막아 두었습니다'; } }, 400); };
+    try { localStorage.setItem(memoKey(id), m.innerHTML); saveTxt.textContent = '저장됨 ✓'; } catch(e){ saveTxt.textContent = '이 브라우저는 저장을 막아 두었습니다'; } window.scSync.memo(id, m.innerHTML); }, 400); };
   m.oninput = e => { mdShortcut(m); save(); };
   const run = (cmd, val) => { m.focus(); document.execCommand('styleWithCSS', false, true); document.execCommand(cmd, false, val); save(); };
   // 형광펜: 이미 같은 색이 칠해진 곳을 다시 누르면 지운다(한 번 더 누르면 해제)
@@ -405,7 +407,9 @@ function route(){
   const h = decodeURIComponent(location.hash.slice(1) || '/');
   const [, kind, arg] = h.split('/');
   closePanel();   // 화면이 바뀌면 패널은 닫는다(패널 안 개념 이동은 주소를 바꾸지 않음)
-  if (kind === '문항') problem(arg);
+  window.scExamStop();
+  if (kind === '시험'){ document.body.classList.remove('done'); window.scExam(arg, h.split('/')[3]); }
+  else if (kind === '문항') problem(arg);
   else if (kind === '개념') concept(arg);
   else if (kind === '목록') home(arg);
   else { document.body.classList.remove('done'); home(); }

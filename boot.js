@@ -148,7 +148,8 @@ async function adminScreen(msg) {
 function startApp(isAdmin) {
   gate.style.display = 'none'; layout.style.display = '';
   const s = document.createElement('script');
-  s.src = 'app.js?v=1';
+  s.src = 'app.js?v=2';
+  window.scIsAdmin = isAdmin;
   document.body.appendChild(s);
   const top = document.querySelector('.top .in');
   if (isAdmin) {
@@ -175,7 +176,7 @@ async function main() {
     return linkScreen();
   }
   showGate('<p>문제를 불러오는 중입니다…</p>');
-  try { await loadData(); startApp(acc.role === 'admin'); }
+  try { await loadData(); try { await window.scSync.init(session.user.id); } catch (e) {} startApp(acc.role === 'admin'); }
   catch (e) { waitScreen('<p>문제를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>'); }
 }
 main();

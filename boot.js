@@ -18,7 +18,8 @@ function loginScreen(msg) {
   }
   showGate(`${msg ? `<p class="gateerr">${msg}</p>` : ''}
     <button class="gatebtn" id="gglogin">구글로 로그인</button>
-    <p class="gatesub">학교 계정이 아니라 <b>개인 구글 계정</b>으로 로그인하세요. 학교 계정은 막혀 있을 수 있고, 졸업하면 기록이 사라질 수 있습니다.</p>`);
+    <p class="gatesub">학교 계정이 아니라 <b>개인 구글 계정</b>으로 로그인하세요. 학교 계정은 막혀 있을 수 있고, 졸업하면 기록이 사라질 수 있습니다.</p>
+    <p class="gatesub">사이큐브는 최과학 과학전문학원 학생이 과학 문제를 풀고 해설과 기록을 보는 서비스입니다. <a href="privacy.html">개인정보처리방침</a></p>`);
   document.getElementById('gglogin').onclick = () => sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
 }
 

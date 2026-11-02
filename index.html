@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>사이큐브</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+/* 사이큐브 화면 틀 1판 (2026-10-28, T-272) — 색 · 글자 · 부품은 사이큐브_디자인규격_v1.md 그대로 */
+:root{--bg:#FFFFFF;--line:#E5E7EB;--line-strong:#C9CDD4;--text:#111111;--sub:#888888;--primary:#2F6BFF;--danger:#E5484D;--ok:#22A06B;--soft:#F5F7FA;--badge-bg:#EEE9FF;--badge-fg:#6B4EFF;--fs:18px}   /* 알렌 실측: 본문 18px */
+
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:var(--fs);line-height:28px}   /* 알렌 실측: 줄 높이 28px · 자간 보통 */
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+
+/* 상단 바 */
+.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
+.top .in{max-width:1200px;margin:0 auto;height:56px;padding:0 16px;display:flex;align-items:center;gap:16px}
+.logo{font-size:20px;font-weight:700;color:var(--primary)}
+.crumb{font-size:15px;color:var(--sub)}
+
+/* 본문 + 오른쪽 패널 */
+.layout{display:flex;align-items:flex-start}
+.main{flex:1;min-width:0}
+.wrap{max-width:1060px;margin:0 auto;padding:20px 24px 120px}   /* 화면을 꽉 채우지 않고 가운데(알렌과 비슷한 폭) */
+.panel{display:none;position:sticky;top:57px;width:max(380px,40vw);   /* 본문 6 : 패널 4 (원장 10/28) */height:calc(100vh - 57px);overflow:auto;border-left:1px solid var(--line);background:var(--bg);padding:16px 20px 60px}
+body.panel-open .panel{display:block}
+@media (max-width:899px){
+  body.panel-open .panel{position:fixed;inset:auto 0 0 0;top:auto;width:100%;height:70vh;border-left:0;border-top:1px solid var(--line);z-index:30}
+}
+/* 휴대폰(좁은 화면): 맨 위 줄이 꺾이지 않게 — 제목 작게, 넘기기 단추는 다음 줄로 */
+@media (max-width:599px){
+  .wrap{padding:16px 16px 100px}
+  .bar1{flex-wrap:wrap;gap:8px}
+  .bar1 h1{font-size:19px;white-space:nowrap}
+  .nav span{white-space:nowrap}
+  .crumb{display:none}
+  .ptabs{gap:12px;font-size:14px;overflow-x:auto;flex:1;min-width:0}
+  .ptabs button{white-space:nowrap;flex:none}
+  .panel{padding:12px 16px 60px}
+}
+.ph{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.ph .sp{flex:1}
+
+/* 부품 */
+.btn{height:36px;padding:0 16px;border-radius:6px;font-size:15px;font-weight:500;display:inline-flex;align-items:center;white-space:nowrap}
+.btn-p{background:var(--primary);color:#fff}
+.btn-p:disabled{background:var(--line-strong);cursor:default}
+.btn-s{border:1px solid var(--line);background:var(--bg)}
+.ic{width:32px;height:32px;border:1px solid var(--line);border-radius:6px;display:grid;place-items:center;font-size:16px}
+.badge{display:inline-block;background:var(--soft);border-radius:4px;padding:0 8px;font-size:13px;color:var(--text)}
+.badge.v{background:var(--badge-bg);color:var(--badge-fg)}
+.sub{color:var(--sub);font-size:14px}
+h1{font-size:22px;font-weight:700;margin:0}
+h2{font-size:18px;font-weight:700;margin:44px 0 8px}   /* 알렌: 「해설」 「오답 선지」 제목도 본문과 같은 18px 굵게 */
+
+/* 목록 화면 */
+.tabs{display:flex;gap:8px;margin:20px 0 12px}
+.tab{height:40px;padding:0 16px;border:1px solid var(--line);border-radius:6px;font-size:15px;font-weight:500}
+.tab.on{border-color:var(--primary);color:var(--primary)}
+.rows{border:1px solid var(--line);border-radius:8px}
+.row{display:flex;align-items:center;gap:12px;padding:14px 20px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row:hover{background:var(--soft)}
+.row .no{width:28px;color:var(--sub);font-size:14px}
+.row .t{flex:1;font-weight:500;min-width:0}
+.row .pv{display:block;font-weight:400;font-size:15px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mark{width:22px;text-align:center;font-weight:700}
+.mark.ok{color:var(--ok)}.mark.bad{color:var(--danger)}
+.search{width:100%;height:48px;border:1px solid var(--line);border-radius:24px;padding:0 20px;font:inherit;font-size:15px;margin-bottom:12px}
+.group{margin-top:20px}
+.group h3{font-size:15px;font-weight:700;color:var(--sub);margin:0 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line-strong);border-radius:6px;padding:4px 12px;font-size:15px}
+.chip:hover{border-color:var(--primary);color:var(--primary)}
+.chip .n{color:var(--sub);font-size:13px;margin-left:4px}
+
+/* 문제 화면 */
+.bar1{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.nav{display:flex;align-items:center;gap:8px;font-size:15px}
+.bar2{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
+.qno{font-weight:700}
+.stem p{margin:6px 0}
+.stem .step{padding-left:0}
+.fig{text-align:center;margin:16px 0}
+.fig img{max-width:100%;max-height:360px}
+.bogi{position:relative;border:1px solid var(--text);padding:18px 20px 12px;margin:20px 0 12px;line-height:1.9}
+.bogi .bt{position:absolute;top:-0.8em;left:50%;transform:translateX(-50%);background:var(--bg);padding:0 12px;font-size:15px;line-height:1.4}
+.choices{list-style:none;margin:20px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.ch{display:flex;align-items:center;gap:12px;min-height:52px;padding:8px 12px 8px 16px;border:1px solid var(--line);border-radius:8px;cursor:pointer;text-align:left;width:100%}
+.ch:hover{border-color:var(--line-strong)}
+.ch .num{width:26px;height:26px;border:1px solid var(--line-strong);border-radius:50%;font-size:14px;display:grid;place-items:center;flex:none}
+.ch .txt{flex:1}
+/* ①~⑤만 있는 문제: 선지 앞 ○✕ 칸(보기와 같은 방식 — 처음 ○, 그다음 ○ ↔ ✕). 글자는 지우지 않는다. 고르기는 선지 글자를 누른다 */
+/* 합답형: <보기> 줄 아무 데나 누르면 오답 소거(줄 긋기), 선지에는 [오답] 단추 없음 */
+.bl{cursor:pointer;border-radius:6px;margin:0 -8px;padding:2px 8px}
+.bl:hover{background:var(--soft)}
+.bl{display:flex;align-items:flex-start;gap:10px;cursor:pointer;user-select:none}
+.bl:hover{background:var(--soft)}
+/* 보기 앞 네모 칸 하나: 누를 때마다 ✕(빨강) → ○(파랑) → 빈칸 */
+.oxb{flex:none;width:24px;height:24px;margin-top:2px;border:1.5px solid var(--line-strong);border-radius:4px;background:var(--bg);font-size:15px;font-weight:700;line-height:1;display:grid;place-items:center;cursor:pointer}
+.oxb:hover{border-color:var(--text)}
+.oxb.x{border-color:var(--danger);color:var(--danger)}
+.oxb.o{border-color:var(--primary);color:var(--primary)}
+body.done .oxb{cursor:default}
+.refs{margin:6px 0;padding-left:22px}.refs li{margin:4px 0}
+.qa-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:56px}
+.post{border-top:1px solid var(--line);padding:12px 0;white-space:pre-wrap;width:100%}
+.post:first-child{border-top:0}
+.bmk{width:20px;color:var(--primary)}
+.ask{display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid var(--line);border-radius:8px;padding:24px;margin-top:16px}
+body.done .bl{cursor:default}
+body.done .bl:hover{background:none}
+.hapdap .ch .cx{display:none}
+.tag{display:inline-block;margin-left:8px;font-size:13px;font-weight:500;padding:0 8px;border-radius:4px;background:#E7F6EF;color:var(--ok)}
+/* 메모장 — 알렌 · 슬랙처럼 아이콘 도구줄 */
+.tbar{display:flex;flex-wrap:wrap;align-items:center;gap:2px;border:1px solid var(--line);border-bottom:0;border-radius:6px 6px 0 0;background:var(--soft);padding:4px 6px}
+.tbar button{min-width:32px;height:32px;border-radius:6px;font-size:15px;display:inline-grid;place-items:center;position:relative;color:#444}
+.tbar button:hover{background:var(--line)}
+.tbar select{height:32px;border:0;background:transparent;font:inherit;font-size:14px;padding:0 4px;cursor:pointer}
+.tbar .sep{width:1px;height:20px;background:var(--line-strong);margin:0 4px}
+.tbar .dd{position:relative;display:inline-flex}
+.tbar .caret{min-width:16px;font-size:11px}
+.tbar .bar{position:absolute;left:8px;right:8px;bottom:4px;height:3px;border-radius:2px}
+.pal{display:none;position:absolute;top:36px;left:0;z-index:5;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px;gap:4px}
+.pal.on{display:flex}
+.pal button span{width:22px;height:22px;border:1px solid var(--line);border-radius:4px;display:grid;place-items:center;font-weight:700;font-size:14px}
+.memo{min-height:50vh;outline:none;line-height:1.8;padding:12px 14px;border:1px solid var(--line);border-radius:0 0 6px 6px}
+.memo:empty:before{content:"이 문제에 대한 메모를 적어 보세요.";color:var(--sub)}
+.memo h3{font-size:18px;margin:8px 0}.memo h4{font-size:16px;margin:6px 0}
+.memo blockquote{margin:6px 0;padding-left:12px;border-left:3px solid var(--line-strong);color:#444}
+.memo mark{background:#FFF3A3}
+.mhelp{color:var(--sub);font-size:13px;margin-top:8px;line-height:1.8}
+.mhelp code{background:var(--soft);border-radius:4px;padding:0 4px;font-size:12px;color:var(--text)}
+.mfoot{display:flex;justify-content:space-between;color:var(--sub);font-size:13px;margin-top:8px}
+.tools{display:flex;gap:6px}
+.ic svg{display:block}
+.ic.on{border-color:var(--primary);color:var(--primary)}
+/* 답안지 */
+.sheet{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.srow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px}
+.srow:hover,.srow.cur{background:var(--soft)}
+.srow .sn{width:24px;font-weight:700;font-size:14px}
+.srow .dot{width:24px;height:24px;border:1px solid var(--line-strong);border-radius:50%;display:grid;place-items:center;font-size:12px;color:var(--sub)}
+.dot{width:24px;height:24px;border:1px solid var(--line-strong);border-radius:50%;display:inline-grid;place-items:center;font-size:12px;color:var(--sub)}
+.dot.mine{background:#444;border-color:#444;color:#fff}
+.dot.ok{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:700}
+.dot.ans{border:2px solid var(--primary);color:var(--primary);font-weight:700}
+.dot.bad{background:var(--danger);border-color:var(--danger);color:#fff}
+.sr{width:18px;font-weight:700;text-align:center}.sr.o{color:var(--primary)}.sr.x{color:var(--danger)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:16px;font-size:13px;color:var(--sub)}
+.legend > span{display:inline-flex;align-items:center;gap:6px}
+.srow .sq{width:16px;color:var(--primary);font-weight:700}
+.ptabs{display:flex;gap:16px;font-size:15px}
+.ptabs button{color:var(--sub);padding:4px 0}
+.ptabs button.on{color:var(--text);font-weight:700}
+.ch.sel{border-color:var(--primary)}
+.ch.sel .num{background:var(--primary);border-color:var(--primary);color:#fff}
+body.done .ch{cursor:default}
+body.done .ch.correct{border-color:var(--primary);color:var(--primary)}
+body.done .ch.correct .num{background:var(--primary);border-color:var(--primary);color:#fff}
+body.done .ch.mywrong{border-color:var(--danger);color:var(--danger)}
+body.done .ch.mywrong .num{background:var(--danger);border-color:var(--danger);color:#fff}
+.check{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.result{font-size:17px;font-weight:700;margin-top:16px}
+.result.ok{color:var(--primary)}.result.bad{color:var(--danger)}
+/* 통계 줄(알렌처럼) — 정답률 · 누적 · 평균은 서버가 생기면 채운다 */
+.stat{margin-top:12px;background:var(--soft);border-left:3px solid var(--primary);padding:14px 20px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 24px;font-size:16px}
+.after{display:none}
+body.done .after{display:block}
+/* 해설 · 개념: 한 줄씩 띄워 읽기 편하게(알렌 시험 복습 화면처럼 — 스크롤로 내려 읽으므로 촘촘히 붙이지 않는다) */
+.x{line-height:28px}
+.x ul{margin:8px 0;padding-left:22px}
+.x ul.sub{margin:6px 0 4px;padding-left:20px;font-size:inherit;color:inherit}
+.x li{margin:5px 0 33px}   /* 알렌: 해설 점마다 한 줄(28px) 띄움 */
+.x ul.sub li{margin:5px 0}
+.x li:has(> ul.sub){margin-bottom:33px}
+.x li > ul.sub > li:last-child{margin-bottom:0}
+.x .h3{font-weight:700;margin:40px 0 8px}   /* 소제목이 바뀔 때는 한 줄쯤 더 띄운다 */
+.x .h3:first-child{margin-top:8px}
+.x p{margin:6px 0}
+.x table{border-collapse:collapse;margin:12px 0;width:100%}
+.x th,.x td{border:1px solid var(--line);padding:6px 10px;text-align:center}
+.x th{background:var(--soft)}
+.more{border-top:1px dashed var(--line-strong);margin-top:24px}
+.answer{font-size:18px;font-weight:700;color:var(--primary)}
+.lk{color:var(--primary);border-bottom:1px dashed var(--primary)}
+.lk:hover{border-bottom-style:solid}
+.qlk{color:var(--primary);font-weight:500}
+.rel{display:flex;flex-wrap:wrap;gap:8px}
+
+/* 개념 카드 */
+.cname{font-size:24px;font-weight:700;color:var(--primary);margin:4px 0 2px}
+.cmeta{color:var(--sub);font-size:14px}
+.qlist{list-style:none;padding:0;margin:8px 0}
+.qlist li{margin:6px 0}
+.qlist a{display:flex;gap:8px;align-items:center;border:1px solid var(--line-strong);border-radius:8px;padding:10px 14px}
+.qlist a:hover{border-color:var(--primary)}
+.filters{margin:8px 0 4px}.fbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}.fk{font-size:14px;color:#666;width:44px}
+.fch{border:1px solid #CCD6F0;background:#fff;border-radius:16px;padding:4px 12px;font-size:15px;cursor:pointer}.fch.on{background:#2F6BFF;color:#fff;border-color:#2F6BFF}
+.fcount{font-size:14px;color:#666;margin-top:4px}
+</style>
+<meta name="robots" content="noindex">
+<style>
+.gatebox{max-width:420px;margin:12vh auto 0;padding:32px 24px;text-align:center}
+.gatelogo{font-size:32px;font-weight:700;color:#2F6BFF;margin-bottom:28px}
+.gatebtn{display:block;width:100%;height:52px;border-radius:8px;background:#2F6BFF;color:#fff;font-size:17px;font-weight:600;margin:16px 0;border:0;cursor:pointer}
+.gatebtn.gatesec{background:#fff;color:#111;border:1px solid #E5E7EB;font-weight:500}
+.gatesub{font-size:14px;color:#666;line-height:1.6}
+.gateerr{color:#E5484D}
+</style>
+</head>
+<body>
+<div class="top"><div class="in"><a class="logo" href="#/">사이큐브</a><span class="crumb">통합과학 › 진화와 생물다양성</span></div></div>
+<div class="layout">
+  <div class="main"><div class="wrap" id="view"></div></div>
+  <aside class="panel" id="panel"></aside>
+</div>
+<div id="gate" style="display:none"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="boot.js?v=1"></script>
+
+</body>
+</html>

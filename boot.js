@@ -80,14 +80,78 @@ async function loadData() {
   window.SC = { '문항': Q, '개념': C, '모의평가': [] };
 }
 
-function startApp() {
+function gEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+// 계정 연결 — 학원 웹사이트와 같은 순서(결정 D-432 · D-449): 이름 · 학생 전화번호 · 학부모 전화번호
+function linkScreen(msg) {
+  showGate(`<p><b>계정 연결하기</b></p>
+    <p class="gatesub">출석부에 있는 정보로 학원생을 확인합니다.</p>
+    ${msg ? `<p class="gateerr">${msg}</p>` : ''}
+    <input class="gatein" id="lkName" placeholder="학생 이름" autocomplete="off">
+    <input class="gatein" id="lkStudent" placeholder="학생 전화번호 (없으면 비워 두세요)" inputmode="tel" autocomplete="off">
+    <input class="gatein" id="lkParent" placeholder="학부모 전화번호" inputmode="tel" autocomplete="off">
+    <button class="gatebtn" id="lkGo">연결하기</button>
+    <button class="gatebtn gatesec" id="logout">로그아웃</button>`);
+  document.getElementById('logout').onclick = async () => { await sb.auth.signOut(); loginScreen(); };
+  document.getElementById('lkGo').onclick = async e => {
+    e.target.disabled = true;
+    const { data, error } = await sb.rpc('link_account', {
+      p_name: document.getElementById('lkName').value,
+      p_student_phone: document.getElementById('lkStudent').value,
+      p_parent_phone: document.getElementById('lkParent').value });
+    if (error) return linkScreen('연결하지 못했습니다. 잠시 뒤 다시 해 주세요.');
+    if (data.result === 'invalid') return linkScreen('이름과 학부모 전화번호를 넣어 주세요.');
+    location.reload();
+  };
+}
+
+function pendingScreen() {
+  showGate(`<p><b>원장 승인을 기다리는 중입니다.</b></p>
+    <p class="gatesub">입력한 정보가 출석부와 바로 맞지 않았습니다. 승인되면 이 화면을 새로 고침하세요. 잘못 입력했다면 다시 입력할 수 있습니다.</p>
+    <button class="gatebtn" id="lkAgain">다시 입력하기</button>
+    <button class="gatebtn gatesec" id="logout">로그아웃</button>`);
+  document.getElementById('lkAgain').onclick = () => linkScreen();
+  document.getElementById('logout').onclick = async () => { await sb.auth.signOut(); loginScreen(); };
+}
+
+// 관리자 화면 — 승인 · 거절 · 해제 · 복구
+async function adminScreen(msg) {
+  const { data, error } = await sb.rpc('admin_people');
+  if (error) return showGate('<p>관리 화면을 열지 못했습니다.</p>');
+  const pend = data.pending.map(q => `<div class="adrow"><div><b>${gEsc(q.name)}</b> <span class="gatesub">${gEsc(q.email)}</span><br><span class="gatesub">${gEsc(q.note)}</span></div>
+      <div class="adact"><input class="gatein adno" id="no${q.id}" placeholder="학생번호" value="${gEsc(q.no)}"><button class="btn btn-p" data-ok="${q.id}">승인</button><button class="btn btn-s" data-no="${q.id}">거절</button></div></div>`).join('')
+    || '<p class="gatesub">승인을 기다리는 사람이 없습니다.</p>';
+  const acc = data.accounts.map(a => `<div class="adrow"><div><b>${gEsc(a.name || '')}</b> ${gEsc(a.no || '')} <span class="gatesub">${gEsc(a.email)}</span>${a.status === 'revoked' ? ' <span class="gateerr">해제됨</span>' : ''}</div>
+      <div class="adact">${a.role === 'admin' ? '<span class="gatesub">관리자</span>' : `<button class="btn btn-s" data-acc="${a.user}" data-on="${a.status === 'revoked'}">${a.status === 'revoked' ? '복구' : '해제'}</button>`}</div></div>`).join('')
+    || '<p class="gatesub">연결된 학생이 없습니다.</p>';
+  layout.style.display = 'none'; gate.style.display = 'block';
+  gate.innerHTML = `<div class="adbox"><div class="adhead"><h2>사이큐브 관리</h2><button class="btn btn-s" id="adBack">문제로 돌아가기</button></div>
+    ${msg ? `<p class="gateerr">${gEsc(msg)}</p>` : ''}
+    <h3>승인 대기 (${data.pending.length})</h3>${pend}<h3>연결된 학생 (${data.accounts.length})</h3>${acc}</div>`;
+  document.getElementById('adBack').onclick = () => { gate.style.display = 'none'; layout.style.display = ''; };
+  gate.querySelectorAll('[data-ok]').forEach(b => b.onclick = async () => {
+    const id = +b.dataset.ok;
+    const { error: er } = await sb.rpc('admin_approve', { p_request: id, p_student_no: document.getElementById('no' + id).value });
+    adminScreen(er ? (/already linked/.test(er.message) ? '그 학생번호는 이미 다른 계정에 연결되어 있습니다.' : '승인하지 못했습니다.') : '');
+  });
+  gate.querySelectorAll('[data-no]').forEach(b => b.onclick = async () => { await sb.rpc('admin_reject', { p_request: +b.dataset.no }); adminScreen(); });
+  gate.querySelectorAll('[data-acc]').forEach(b => b.onclick = async () => { await sb.rpc('admin_set_access', { p_user: b.dataset.acc, p_on: b.dataset.on === 'true' }); adminScreen(); });
+}
+
+function startApp(isAdmin) {
   gate.style.display = 'none'; layout.style.display = '';
   const s = document.createElement('script');
   s.src = 'app.js?v=1';
   document.body.appendChild(s);
   const top = document.querySelector('.top .in');
+  if (isAdmin) {
+    const ad = document.createElement('button');
+    ad.textContent = '관리'; ad.className = 'btn btn-s'; ad.style.marginLeft = 'auto';
+    ad.onclick = () => adminScreen();
+    top.appendChild(ad);
+  }
   const out = document.createElement('button');
-  out.textContent = '로그아웃'; out.className = 'btn btn-s'; out.style.marginLeft = 'auto';
+  out.textContent = '로그아웃'; out.className = 'btn btn-s'; out.style.marginLeft = isAdmin ? '8px' : 'auto';
   out.onclick = async () => { await sb.auth.signOut(); location.reload(); };
   top.appendChild(out);
 }
@@ -99,12 +163,12 @@ async function main() {
   if (error || !acc) return waitScreen('<p>계정을 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>');
   const { data: ok } = acc.role === 'admin' ? { data: true } : await sb.rpc('has_any_pass');
   if (!ok) {
-    if (acc.status === 'pending') return waitScreen('<p><b>원장 승인을 기다리는 중입니다.</b></p>');
+    if (acc.status === 'pending') return pendingScreen();
     if (acc.status === 'revoked') return waitScreen('<p>이용이 끝난 계정입니다. 학원에 문의해 주세요.</p>');
-    return waitScreen('<p><b>계정 연결하기</b></p><p class="gatesub">학원생 계정 연결 화면은 곧 열립니다.</p>');
+    return linkScreen();
   }
   showGate('<p>문제를 불러오는 중입니다…</p>');
-  try { await loadData(); startApp(); }
+  try { await loadData(); startApp(acc.role === 'admin'); }
   catch (e) { waitScreen('<p>문제를 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>'); }
 }
 main();

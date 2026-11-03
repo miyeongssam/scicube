@@ -46,58 +46,29 @@ function conceptHTML(c, inPanel){
     <h2>관련 개념</h2><div class="rel">${rel}</div>`;
 }
 
-// 골라 풀기 상태는 이 기기에만(다음에 열어도 그대로)
-function loadFilter(){ try { return JSON.parse(localStorage.getItem('sc.filter') || '{}'); } catch(e){ return {}; } }
-function saveFilter(f){ try { localStorage.setItem('sc.filter', JSON.stringify(f)); } catch(e){} }
-function examOf(q){ const m = q['메타'] || {}; return m['출제기관'] === '평가원' ? '평가원' : m['출제기관'] === 'EBS' ? 'EBS' : m['시험종류'] === '학평' ? '학평' : m['시험종류']; }
-function fsel(F, k){ const v = F[k]; return Array.isArray(v) ? v : (v ? [v] : []); }   // 옛 저장 꼴(한 값)도 읽는다
-document.addEventListener('click', e => { const b = e.target.closest('.fch'); if (!b) return;
-  const f = loadFilter(), k = b.dataset.fk, v = b.dataset.fv;
-  if (v === '') f[k] = [];                                   // 「전체」 = 모두 풀기
-  else { const s = new Set(fsel(f, k)); s.has(v) ? s.delete(v) : s.add(v); f[k] = [...s]; }   // 누를 때마다 넣고 · 빼고
-  saveFilter(f); home(); });
-
-function home(tab){
-  const res = loadRes();
-  const done = Object.keys(res).filter(k => byId[k]).length;
-  let body;
-  if (tab === '개념'){
-    const groups = {};
-    Object.values(C).forEach(c => (groups[c['종류']] = groups[c['종류']] || []).push(c));
-    body = `<input class="search" id="find" placeholder="개념 찾기 (예: 내성, 엘니뇨)">` +
-      Object.keys(groups).map(g => `<div class="group"><h3>${esc(g)}</h3><div class="chips">` +
-        groups[g].sort((a, b) => b['문항'].length - a['문항'].length).map(c =>
-          `<a class="chip" data-k="${esc(c['이름'] + ' ' + c['다른이름'])}" href="#/개념/${esc(c['이름'])}">${esc(c['이름'])}<span class="n">${c['문항'].length}</span></a>`).join('') +
-        `</div></div>`).join('');
-  } else {
-    let lastU = '';
-    // 골라 풀기(원장 10/30 · D-366): 단원 · 학년 · 시험(학평 / 평가원 / EBS) · 월 — 메타데이터는 build_app.py 의 문항메타
-    const F = loadFilter();
-    const opts = {
-      단원: [...new Set(Q.map(q => q['소단원']))].map(u => [u, UNAME(u)]),
-      학년: ['고1', '고2', '고3'].filter(g => Q.some(q => q['메타']['학년'] === g)).map(g => [g, g]),
-      시험: [['학평', '학평'], ['평가원', '평가원(모평 · 수능)'], ['EBS', 'EBS']].filter(([k]) => Q.some(q => examOf(q) === k)),
-      월: [...new Set(Q.map(q => q['메타']['월']).filter(Boolean))].sort((a, b) => a - b).map(m => [m, m + '월'])};
-    const bar = Object.entries(opts).map(([k, list]) => `<div class="fbar"><span class="fk">${k}</span>` +
-      [['', '전체'], ...list].map(([v, t]) => `<button class="fch ${v === '' ? (fsel(F, k).length ? '' : 'on') : (fsel(F, k).includes(v) ? 'on' : '')}" data-fk="${k}" data-fv="${esc(v)}">${esc(t)}</button>`).join('') + `</div>`).join('');
-    const has = (k, v) => !fsel(F, k).length || fsel(F, k).includes(v);   // 여러 개 고르기 — 같은 칸 안은 「또는」
-    const QF = Q.filter(q => has('단원', q['소단원']) && has('학년', q['메타']['학년']) && has('시험', examOf(q)) && has('월', q['메타']['월']));
-    body = `<div class="filters">${bar}<div class="fcount">${QF.length}문항</div></div><div class="rows">` + QF.map(q => {
-      const r = res[q.id];
-      const uh = q['소단원'] !== lastU ? `<h2 style="margin:24px 0 8px;font-size:20px">${esc(UNAME(q['소단원']))}</h2>` : ''; lastU = q['소단원'];
-      // 출처만으로는 무슨 문제인지 모르니 문제 첫 문장을 함께 보인다(원장 10/28)
-      const first = (q['문제'].match(/<p[^>]*>(.*?)<\/p>/) || ['', ''])[1].replace(/<[^>]+>/g, '');
-      return uh + `<a class="row" href="#/문항/${q.id}"><span class="no">${q['순서']}</span><span class="t">${esc(q['출처'])}<span class="pv">${first}</span></span>
-        <span class="badge">${esc(q['자료유형'])}</span><span class="mark ${r ? (r.ok ? 'ok' : 'bad') : ''}">${r ? (r.ok ? '○' : '✕') : ''}</span><span class="bmk">${loadSet('sc.bm').has(q.id) ? ICON.bm : ''}</span></a>`;
-    }).join('') + `</div>`;
-  }
-  view.innerHTML = `<h1>진화와 생물다양성</h1><div class="sub">통합과학 · 문제 ${Q.length} · 개념 카드 ${Object.keys(C).length} · 푼 문제 ${done}</div>
-    <div class="tabs"><a class="tab ${tab !== '개념' ? 'on' : ''}" href="#/">문제</a><a class="tab ${tab === '개념' ? 'on' : ''}" href="#/목록/개념">개념 카드</a><a class="tab" href="#/시험">시험</a></div>${body}`;
+// 개념 카드 목록(도구 · 과목 메뉴에서 같이 씀)
+function conceptListHTML(){
+  const groups = {};
+  Object.values(C).forEach(c => (groups[c['종류']] = groups[c['종류']] || []).push(c));
+  return `<input class="search" id="find" placeholder="개념 찾기 (예: 내성, 엘니뇨)">` +
+    Object.keys(groups).map(g => `<div class="group"><h3>${esc(g)}</h3><div class="chips">` +
+      groups[g].sort((a, b) => b['문항'].length - a['문항'].length).map(c =>
+        `<a class="chip" data-k="${esc(c['이름'] + ' ' + c['다른이름'])}" href="#/개념/${esc(c['이름'])}">${esc(c['이름'])}<span class="n">${c['문항'].length}</span></a>`).join('') +
+      `</div></div>`).join('');
+}
+function wireFind(){
   const f = document.getElementById('find');
-  if (f) f.oninput = () => document.querySelectorAll('.chip').forEach(ch => ch.style.display = ch.dataset.k.includes(f.value.trim()) ? '' : 'none');
+  if (f) f.oninput = () => document.querySelectorAll('.chip[data-k]').forEach(ch => ch.style.display = ch.dataset.k.includes(f.value.trim()) ? '' : 'none');
+}
+// #/목록/개념 = 개념 카드 목록. 그 밖의 옛 주소(#/목록)는 홈으로
+function home(tab){
+  if (tab !== '개념') return homeV();
+  document.body.classList.remove('done'); crumbSet('개념 카드');
+  view.innerHTML = `<h1>개념 카드</h1><div class="sub">${Object.keys(C).length}장 · 파란 낱말을 누르면 그 개념으로 갑니다</div>` + conceptListHTML();
+  wireFind();
 }
 
-function UNAME(u){ return ({'자연선택과진화': '자연선택과 진화', '생물다양성과보전': '생물다양성과 보전'})[u] || u; }
+function UNAME(u){ for (const s of (window.SC_UNITS || [])) for (const m of s.majors) for (const d of m.mids) for (const x of d.subs) if (x.unit === u) return x.name; return u; }
 
 // 해설 묶음(문제 화면 · 시험 답안지 함께): 바로 가기 단추 → 해설 → 보기 해설 → 더 알아보기(접어 둠) → 관련 개념 (원장 11/03 3차 검토)
 function solHTML(s){
@@ -166,17 +137,19 @@ function wireItem(id, sheet){
 
 function problem(id){
   const q = byId[id]; if (!q) return home();
-  const i = Q.indexOf(q), prev = Q[i - 1], next = Q[i + 1];
+  // 풀기 묶음(단원별 · 오답노트 · 오늘의 문항) 안의 문항이면 그 차례로 넘긴다
+  const S = sess(), inS = !!(S && S.ids.includes(id)), L = inS ? S.ids.map(x => byId[x]).filter(Boolean) : Q;
+  const i = L.indexOf(q), prev = L[i - 1], next = L[i + 1];
   const saved = loadRes()[id];
   let sel = saved ? saved.sel : 0;
   const t0 = Date.now();   // 나의 풀이 시간: 문제를 연 때부터 「정답 확인」까지
   document.body.classList.toggle('done', !!saved);
   const rel = q['관련'].map(r => `<a class="lk" href="#/개념/${esc(r['카드'])}">${esc(r['말'])}</a>`).join(' · ');
   view.innerHTML = `
-    <div class="bar1"><h1>${esc(UNAME(q['소단원']))}</h1>
-      <div class="nav"><a class="btn btn-s" href="#/">목록</a>
-        <a class="ic" ${prev ? `href="#/문항/${prev.id}"` : 'style="color:var(--line)"'}>‹</a><span>${i + 1} / ${Q.length}</span>
-        <a class="ic" ${next ? `href="#/문항/${next.id}"` : 'style="color:var(--line)"'}>›</a></div></div>
+    ${inS ? sessBar(S, id) : `<div class="bar1"><h1>${esc(UNAME(q['소단원']))}</h1>
+      <div class="nav"><a class="btn btn-s" href="#/과목/IS1">단원 목록</a>
+        <a class="ic" ${prev ? `href="#/문항/${prev.id}"` : 'style="color:var(--line)"'}>‹</a><span>${i + 1} / ${L.length}</span>
+        <a class="ic" ${next ? `href="#/문항/${next.id}"` : 'style="color:var(--line)"'}>›</a></div></div>`}
     <div class="bar2"><span class="qno">${esc(q['출처'])}</span><span class="badge">${esc(q['자료유형'])}</span>${q['배점'] ? `<span class="sub">${esc(q['배점'])}점</span>` : ''}
       <span style="flex:1"></span>
       ${toolsHTML(id)}</div>
@@ -190,7 +163,7 @@ function problem(id){
       ${tailHTML(id)}
       <div class="check" style="justify-content:space-between;margin-top:32px">
         ${prev ? `<a class="btn btn-s" href="#/문항/${prev.id}">‹ 이전 문제</a>` : '<span></span>'}
-        ${next ? `<a class="btn btn-s" href="#/문항/${next.id}">다음 문제 ›</a>` : `<a class="btn btn-s" href="#/">목록으로</a>`}</div>
+        ${next ? `<a class="btn btn-s" href="#/문항/${next.id}">다음 문제 ›</a>` : inS ? `<a class="btn btn-p" href="#/풀기/끝">끝내기 ›</a>` : `<a class="btn btn-s" href="#/과목/IS1">단원 목록</a>`}</div>
     </div>`;
   wireJump(view);
   const chs = [...view.querySelectorAll('.ch')], check = document.getElementById('check');
@@ -255,6 +228,8 @@ function problem(id){
     paint();
   });
   wireItem(id, () => openSheet());
+  if (inS){ wireSess(S); if (S.pAt){ view.querySelector('.stem').style.visibility = 'hidden'; view.querySelector('.choices').style.visibility = 'hidden'; } }
+  crumbSet(inS ? S.title : UNAME(q['소단원']));
   paint();
 }
 
@@ -446,17 +421,271 @@ document.addEventListener('click', e => {
   }
 });
 
+// ───── 태블릿 틀 · 풀기 엔진 · 오답노트 · 오늘의 10문항 (원장 11/03 — 결정 D-483 · D-484 · D-489) ─────
+// 과목 · 단원 사다리는 units.js(단원체계.csv 에서 뽑음). 문항의 열쇠 = 과목코드:소단원
+const UNITS = window.SC_UNITS || [], SUBJ = Object.fromEntries(UNITS.map(s => [s.code, s]));
+const subsOf = s => s.majors.flatMap(m => m.mids.flatMap(d => d.subs));
+const keyOf = q => q['단원키'] || ('IS1:' + q['소단원']);
+const qsOfKeys = keys => { const k = new Set(keys); return Q.filter(q => k.has(keyOf(q))); };
+const SCIENCE_APP = 'https://miyeongssam.github.io/choigwahak-science/science-app/';   // 링크모음 L-115
+const today = () => new Date().toLocaleDateString('sv-SE');
+const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '—';
+
+// 풀이 이력(연습 + 시험)을 문항마다 시간 순으로 — 시험 풀이는 sync.js 가 sc.examAtt 에 내려 둔다
+function loadExamAtt(){ try { return JSON.parse(localStorage.getItem('sc.examAtt') || '[]'); } catch(e){ return []; } }
+function solveLog(){
+  const h = {};
+  loadAttempts().forEach(a => (h[a['문항']] = h[a['문항']] || []).push({ok: !!a['맞음'], at: a['날짜']}));
+  loadExamAtt().forEach(a => (h[a.q] = h[a.q] || []).push({ok: !!a.ok, at: a.at}));
+  Object.values(h).forEach(l => l.sort((x, y) => String(x.at).localeCompare(String(y.at))));
+  return h;
+}
+// 오답노트: 한 번이라도 틀렸고, 마지막 두 번을 연달아 맞히지 않은 문항(두 번 연달아 맞히면 저절로 빠짐 — D-489)
+function wrongIds(h){ return Object.keys(h).filter(id => byId[id] && h[id].some(x => !x.ok) && !(h[id].length >= 2 && h[id].slice(-2).every(x => x.ok))); }
+function memoIds(){ return Q.filter(q => { try { return (localStorage.getItem('sc.memo.' + q.id) || '').replace(/<[^>]+>/g, '').trim(); } catch(e){ return false; } }).map(q => q.id); }
+
+// 풀기 엔진 하나 — 범위(소단원 열쇠) × 어떤 문항 × 몇 문항 × 섞기. 단원별 풀기 · 오답노트 · 오늘의 10문항이 모두 이것을 쓴다
+function pickIds({keys, ids, kind, n, shuffle}){
+  const h = solveLog(), wrong = new Set(wrongIds(h)), un = loadSet('sc.unsure'), bm = loadSet('sc.bm');
+  const F = {'전체': () => true, '안 푼 것': q => !h[q.id], '틀린 것': q => wrong.has(q.id), '헷갈림 · 북마크': q => un.has(q.id) || bm.has(q.id)};
+  let list = (ids ? ids.map(i => byId[i]).filter(Boolean) : keys ? qsOfKeys(keys) : Q).filter(F[kind] || F['전체']);
+  if (shuffle) list = list.map(q => [Math.random(), q]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+  return list.slice(0, n === '전부' || !n ? list.length : +n).map(q => q.id);
+}
+
+// 풀기 묶음(세션): 문제 화면을 차례로 넘긴다. 타이머는 25문항당 40분 비율, 멈춤 됨(D-492)
+const SKEY2 = 'sc.sess';
+function sess(){ try { return JSON.parse(localStorage.getItem(SKEY2)); } catch(e){ return null; } }
+function saveSess(s){ try { s ? localStorage.setItem(SKEY2, JSON.stringify(s)) : localStorage.removeItem(SKEY2); } catch(e){} }
+function startSess(title, ids, timer, keep){
+  if (!ids.length) return alert('고른 조건에 맞는 문항이 없습니다.');
+  if (!keep) ids.forEach(id => { if (loadRes()[id]) clearRes(id); });
+  saveSess({title, ids, t0: Date.now(), mins: timer ? Math.max(1, Math.round(ids.length * 40 / 25)) : 0, paused: 0, pAt: null, day: today()});
+  const first = keep ? ids.find(id => !loadRes()[id]) || ids[0] : ids[0];
+  location.hash = '#/문항/' + first;
+}
+let sesClock = null;
+function sesLeft(S){ const now = Date.now(); return Math.round(S.mins * 60 - (now - S.t0 - S.paused - (S.pAt ? now - S.pAt : 0)) / 1000); }
+function sessBar(S, id){
+  const i = S.ids.indexOf(id), n = S.ids.length, prev = S.ids[i - 1], next = S.ids[i + 1];
+  return `<div class="bar1"><h1>${esc(S.title)}</h1>
+    <div class="nav">${S.mins ? `<span class="extime" id="sesT"></span><button class="btn btn-s" id="sesP">${S.pAt ? '▶ 이어 풀기' : '⏸ 멈춤'}</button>` : ''}
+      <a class="ic" ${prev ? `href="#/문항/${prev}"` : 'style="color:var(--line)"'}>‹</a><span>${i + 1} / ${n}</span>
+      <a class="ic" ${next ? `href="#/문항/${next}"` : 'style="color:var(--line)"'}>›</a><a class="btn btn-s" href="#/풀기/끝">끝내기</a></div></div>`;
+}
+function wireSess(S){
+  clearInterval(sesClock);
+  const T = document.getElementById('sesT'); if (!T) return;
+  const tick = () => { const s = sesLeft(S); T.textContent = s > 0 ? `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : '시간 끝'; T.classList.toggle('low', s <= 60); };
+  tick(); sesClock = setInterval(tick, 1000);
+  document.getElementById('sesP').onclick = () => {
+    const s2 = sess(); if (s2.pAt){ s2.paused += Date.now() - s2.pAt; s2.pAt = null; } else s2.pAt = Date.now();
+    saveSess(s2); problem(decodeURIComponent(location.hash).slice('#/문항/'.length));
+  };
+}
+function sessEnd(){
+  const S = sess(); if (!S) return homeV();
+  const res = loadRes(), done = S.ids.filter(id => res[id]), ok = done.filter(id => res[id].ok), bad = done.filter(id => !res[id].ok);
+  view.innerHTML = `<div class="excrumb"><a href="#/">홈</a> › ${esc(S.title)}</div><h1>${esc(S.title)} — 결과</h1>
+    <div class="cards3"><div class="card"><div class="sub">맞힌 문항</div><div class="exscore">${ok.length} / ${S.ids.length}</div></div>
+      <div class="card"><div class="sub">푼 문항</div><div class="exscore">${done.length}</div></div><div class="card"><div class="sub">틀린 문항</div><div class="exscore" style="color:var(--danger)">${bad.length}</div></div></div>
+    <div class="check" style="justify-content:flex-start;gap:8px;flex-wrap:wrap">
+      ${bad.length ? '<button class="btn btn-p" id="seBad">틀린 것만 다시 풀기</button>' : ''}<a class="btn btn-s" href="#/오답노트">오답노트</a><a class="btn btn-s" href="#/">홈</a></div>
+    <h2 class="exh2">문항</h2>${qRows(S.ids)}`;
+  const b = document.getElementById('seBad'); if (b) b.onclick = () => startSess(S.title + ' · 틀린 것', bad, !!S.mins);
+}
+// 문항 한 줄(번호 · 출처 · 소단원 · 첫 문장 · ○✕)
+function qRows(ids, extra){
+  const res = loadRes();
+  return `<div class="rows">${ids.map((id, i) => { const q = byId[id]; if (!q) return ''; const r = res[id];
+    const first = (q['문제'].match(/<p[^>]*>(.*?)<\/p>/) || ['', ''])[1].replace(/<[^>]+>/g, '');
+    return `<a class="row" href="#/문항/${id}"><span class="no">${i + 1}</span><span class="t">${esc(q['출처'])} <span class="sub">· ${esc(UNAME(q['소단원']))}</span><span class="pv">${first}</span></span>
+      ${extra ? `<span class="sub">${extra(id)}</span>` : ''}<span class="mark ${r ? (r.ok ? 'ok' : 'bad') : ''}">${r ? (r.ok ? '○' : '✕') : ''}</span></a>`; }).join('')}</div>`;
+}
+
+// 오늘의 10문항: 하루 한 묶음 — 틀린 것 → 헷갈림 · 북마크 → 안 푼 것 차례로 채움(D-489). 설정은 마이에서
+function todaySet(){ try { return Object.assign({on: true, n: 10}, JSON.parse(localStorage.getItem('sc.todaySet') || '{}')); } catch(e){ return {on: true, n: 10}; } }
+function todayPack(){
+  let t = null; try { t = JSON.parse(localStorage.getItem('sc.today') || 'null'); } catch(e){}
+  const set = todaySet();
+  if (!t || t.day !== today() || t.n !== set.n){
+    const seen = new Set(), ids = [];
+    ['틀린 것', '헷갈림 · 북마크', '안 푼 것', '전체'].forEach(kind => pickIds({kind, shuffle: true}).forEach(id => { if (ids.length < set.n && !seen.has(id)){ seen.add(id); ids.push(id); } }));
+    t = {day: today(), n: set.n, ids, started: false};
+    try { localStorage.setItem('sc.today', JSON.stringify(t)); } catch(e){}
+  }
+  return t;
+}
+
+// 왼쪽 메뉴(태블릿 · PC) — 좁은 화면에서는 위쪽 가로 줄
+const SIDE = [['홈', '#/', 'home'], ['시험', '#/시험', 'exam'], ['오답노트', '#/오답노트', 'note'], ['도구', '#/도구', 'tool'], ['마이', '#/마이', 'my']];
+function sideNav(){
+  let nav = document.getElementById('side');
+  if (!nav){ nav = document.createElement('nav'); nav.id = 'side'; nav.className = 'side'; document.querySelector('.layout').prepend(nav); }
+  const h = decodeURIComponent(location.hash || '#/');
+  const on = href => href === '#/' ? (h === '#/' || h === '#' || h === '') : h.startsWith(href);
+  const subj = [['수능 통합과학', 'IS1'], ['물리', 'PH2'], ['화학', 'CH2'], ['생명', 'BI2']];
+  const curS = (h.match(/^#\/과목\/([^/]+)/) || [])[1];
+  const grp = curS && SUBJ[curS] ? SUBJ[curS].group : '';
+  nav.innerHTML = SIDE.map(([t, href]) => `<a class="si ${on(href) ? 'on' : ''}" href="${href}">${t}${t === '시험' ? '<b class="sbadge" id="sideExam"></b>' : ''}</a>`).join('')
+    + `<div class="sh">과목</div>` + subj.map(([t, c]) => `<a class="si ${curS && (curS === c || (grp && grp === (SUBJ[c] || {}).group && c !== 'IS1')) ? 'on' : ''}" href="#/과목/${c}">${t}</a>`).join('');
+}
+async function examCount(){
+  try { const { data } = await sb.rpc('exam_list'); return (data || []).filter(s => s.open && (s.started || !(s.tries || []).length)); } catch(e){ return []; }
+}
+function crumbSet(t){ const c = document.querySelector('.top .crumb'); if (c) c.textContent = t; }
+
+// 홈: 위 세 칸(오늘의 10문항 · 받은 시험 · 다시 볼 것) → 수능 통합과학 대단원 6 → 과목별(물리 · 화학 · 생명) — 확정 D-484
+function homeV(){
+  document.body.classList.remove('done'); crumbSet('홈');
+  const h = solveLog(), wrong = wrongIds(h), un = loadSet('sc.unsure'), bm = loadSet('sc.bm');
+  const t = todayPack(), set = todaySet(), res = loadRes(), solved = t.ids.filter(id => res[id]).length;
+  const IS = SUBJ.IS1;
+  const majorStat = m => { const qs = qsOfKeys(m.mids.flatMap(d => d.subs.map(s => s.key))); let a = 0, c = 0; qs.forEach(q => (h[q.id] || []).forEach(x => { a++; if (x.ok) c++; })); return {n: qs.length, rate: pct(c, a)}; };
+  const groups = [['물리', ['PH2', 'ME2', 'EQ3']], ['화학', ['CH2', 'MT2', 'CR3']], ['생명', ['BI2', 'CM2', 'BG3']]];
+  view.innerHTML = `<h1>오늘도 해 볼까요</h1>
+    <div class="cards3">
+      ${set.on ? `<a class="card hl" href="javascript:void 0" id="hmToday"><b>오늘의 ${set.n}문항</b><div class="sub">${solved >= t.ids.length && t.ids.length ? '오늘 끝 ✓' : `${solved} / ${t.ids.length} 풂 · 시작 ›`}</div></a>` : ''}
+      <a class="card" href="#/시험"><b>받은 시험 <span id="hmExamN"></span></b><div class="sub" id="hmExam">불러오는 중…</div></a>
+      <a class="card" href="#/오답노트"><b>다시 볼 것</b><div class="sub">틀림 ${wrong.length} · 헷갈림 ${un.size} · 북마크 ${bm.size}</div></a></div>
+    <h2 class="exh2">수능 통합과학</h2>
+    <div class="g6">${IS.majors.map((m, i) => { const st = majorStat(m); return `<a class="ucard ${st.n ? '' : 'off'}" href="#/과목/IS1/단원/${i}"><b>${esc(m.name.split(' ')[0])}</b><span>${esc(m.name.split(' ').slice(1).join(' '))}</span><small>${st.n ? `${st.n}문항 · 정답률 ${st.rate}` : '준비 중'}</small></a>`; }).join('')}</div>
+    <h2 class="exh2">과목별</h2>
+    <div class="cards3">${groups.map(([g, codes]) => `<div class="card"><b>${g}</b><div class="sub">${codes.map(c => { const n = qsOfKeys(subsOf(SUBJ[c]).map(s => s.key)).length; return `<a href="#/과목/${c}">${esc(SUBJ[c].name)}</a>${n ? '' : ' <span class="muted">준비 중</span>'}`; }).join(' · ')}</div></div>`).join('')}</div>`;
+  const hb = document.getElementById('hmToday');
+  if (hb) hb.onclick = () => { const S = sess(), tp = todayPack(); startSess(`오늘의 ${tp.n}문항`, tp.ids, false, S && S.day === today() && S.title.startsWith('오늘의')); };
+  examCount().then(list => { const e1 = document.getElementById('hmExam'); if (!e1) return;
+    document.getElementById('hmExamN').textContent = list.length || '';
+    e1.innerHTML = list.length ? list.slice(0, 2).map(s => esc(s.name) + (s.closes_at ? ` · ${new Date(s.closes_at).toLocaleDateString('ko-KR', {month: 'numeric', day: 'numeric'})}까지` : '')).join('<br>') : '지금 풀 시험이 없습니다'; });
+}
+
+// 과목 화면: 위 메뉴(단원별로 풀기 · 기출 모의고사 · 학원 모의평가 · 개념 카드 · 개념 영상 · 학교 기출은 관리자만)
+function subjectV(code, tab, arg){
+  const S0 = SUBJ[code] || SUBJ.IS1; code = S0.code; tab = tab || '단원';
+  document.body.classList.remove('done'); crumbSet(S0.name);
+  const sibs = S0.group === '통합' ? [] : UNITS.filter(s => s.group === S0.group);
+  const tabs = [['단원', '단원별로 풀기'], ['기출', '기출 모의고사'], ['평가', '학원 모의평가'], ['개념', '개념 카드'], ['영상', '개념 영상']].concat(window.scIsAdmin ? [['학교', '학교 기출 · 관리자만']] : []);
+  const head = `${sibs.length ? `<div class="chips" style="margin-bottom:8px">${sibs.map(s => `<a class="chip ${s.code === code ? 'on' : ''}" href="#/과목/${s.code}">${esc(s.name)}</a>`).join('')}</div>` : ''}
+    <h1>${esc(S0.name)}</h1><div class="menu">${tabs.map(([k, t]) => `<a class="${k === tab ? 'on' : ''}" href="#/과목/${code}/${k}">${t}</a>`).join('')}</div>`;
+  if (tab === '단원') return unitPick(S0, head, arg);
+  if (tab === '개념'){ view.innerHTML = head + conceptListHTML(); wireFind(); return; }
+  if (tab === '평가'){ view.innerHTML = head + '<p class="exnote">불러오는 중…</p>';
+    examCount().then(() => sb.rpc('exam_list')).then(({data}) => { view.innerHTML = head + ((data || []).map(s => `<div class="exrow"><div class="top"><div class="grow"><b>${esc(s.name)}</b><div class="exnote">${s.count}문항 · ${s.minutes || '—'}분${(s.tries || []).length ? ` · ${s.tries.length}회 풂 · 최근 ${s.tries[s.tries.length - 1].score}점` : ''}</div></div><a class="btn btn-s" href="#/시험">시험 목록에서 풀기 ›</a></div></div>`).join('') || '<p class="exnote">아직 받은 학원 모의평가가 없습니다.</p>'); }).catch(() => {}); return; }
+  if (tab === '기출'){
+    const M = {'학평': {'고1': [3, 6, 9, 11], '고2': [3, 6, 9, 11], '고3': [3, 5, 7, 10]}, '모평': {'고3': [6, 9]}, '수능': {'고3': [11]}};
+    const st = Object.assign({e: '학평', g: '고2'}, (() => { try { return JSON.parse(sessionStorage.getItem('sc.gichul') || '{}'); } catch(e){ return {}; } })());
+    if (!M[st.e][st.g]) st.g = Object.keys(M[st.e])[0];
+    const months = M[st.e][st.g], years = [2026, 2025, 2024];
+    view.innerHTML = head + `<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+        <div><div class="sub">시험</div><span class="exseg">${['학평', '모평', '수능'].map(x => `<a href="javascript:void 0" data-ge="${x}" class="${x === st.e ? 'on' : ''}">${{학평: '학평(교육청)', 모평: '모평(평가원)', 수능: '수능'}[x]}</a>`).join('')}</span></div>
+        <div><div class="sub">학년</div><span class="exseg">${['고1', '고2', '고3'].map(x => `<a href="javascript:void 0" data-gg="${x}" class="${x === st.g ? 'on' : ''} ${M[st.e][x] ? '' : 'muted'}">${x}</a>`).join('')}</span></div>
+        <div class="sub" style="padding-bottom:6px">시험 시간 40분 · 25문항 · 50점 만점</div></div>
+      <table class="extab" style="margin-top:12px"><thead><tr><th>시행연도</th>${months.map(m => `<th>${m}월</th>`).join('')}</tr></thead>
+      <tbody>${years.map(y => `<tr><td>${y}</td>${months.map(() => '<td class="muted">준비 중</td>').join('')}</tr>`).join('')}</tbody></table>
+      <p class="exnote">모의고사 회차 문항을 올리면 칸마다 [풀기] · 내 점수가 생깁니다.</p>`;
+    view.querySelectorAll('[data-ge]').forEach(a => a.onclick = () => { st.e = a.dataset.ge; sessionStorage.setItem('sc.gichul', JSON.stringify(st)); subjectV(code, '기출'); });
+    view.querySelectorAll('[data-gg]').forEach(a => a.onclick = () => { if (!M[st.e][a.dataset.gg]) return; st.g = a.dataset.gg; sessionStorage.setItem('sc.gichul', JSON.stringify(st)); subjectV(code, '기출'); });
+    return;
+  }
+  view.innerHTML = head + `<p class="exnote">${tab === '영상' ? '개념 설명 영상을 준비하고 있습니다.' : '학교 기출은 원장님 화면에만 보입니다. 준비 중입니다.'}</p>`;
+}
+// 단원별로 풀기 — 한 화면 세 칸: 대단원 | 소단원(번호 · 체크 · 문항 수 · 정답률) | 어떻게 풀까요 (확정 D-484)
+function unitPick(S0, head, arg){
+  const PK = 'sc.unitpick.' + S0.code;
+  let st; try { st = JSON.parse(sessionStorage.getItem(PK)) || {}; } catch(e){ st = {}; }
+  st = Object.assign({m: 0, keys: [], kind: '전체', n: '10', shuffle: true, timer: false}, st);
+  if (arg != null && arg !== '') st.m = +arg;
+  const M = S0.majors[st.m] || S0.majors[0];
+  const h = solveLog(), save = () => { try { sessionStorage.setItem(PK, JSON.stringify(st)); } catch(e){} };
+  const stat = keys => { const qs = qsOfKeys(keys); let a = 0, c = 0; qs.forEach(q => (h[q.id] || []).forEach(x => { a++; if (x.ok) c++; })); return {n: qs.length, rate: pct(c, a)}; };
+  const mySubs = M.mids.flatMap(d => d.subs).map(s => s.key);
+  const keys = st.keys.filter(k => mySubs.includes(k));
+  const counts = ['전체', '안 푼 것', '틀린 것', '헷갈림 · 북마크'].map(k => [k, pickIds({keys, kind: k, n: '전부'}).length]);
+  const got = pickIds({keys, kind: st.kind, n: st.n});
+  let no = 0;
+  view.innerHTML = head + `<div class="col3">
+    <div class="c1">${S0.majors.map((m, i) => { const sm = stat(m.mids.flatMap(d => d.subs.map(s => s.key))); return `<a href="javascript:void 0" data-m="${i}" class="mrow ${i === st.m ? 'on' : ''} ${sm.n ? '' : 'muted'}">${esc(m.name)}<small>${sm.n ? sm.n + '문항' : '준비 중'}</small></a>`; }).join('')}</div>
+    <div class="c2"><div class="sub" style="display:flex;justify-content:space-between"><span>소단원</span><a href="javascript:void 0" id="upAll">전체 선택</a></div>
+      ${M.mids.map(d => `<div class="mid">${esc(d.name)}</div>` + d.subs.map(s => { no++; const sm = stat([s.key]); return `<label class="srow2 ${sm.n ? '' : 'muted'}"><input type="checkbox" data-k="${esc(s.key)}" ${keys.includes(s.key) ? 'checked' : ''} ${sm.n ? '' : 'disabled'}><span class="sn2">${no}</span><span class="st2">${esc(s.name)}</span><small>${sm.n ? `${sm.n}문항 · ${sm.rate}` : '준비 중'}</small></label>`; }).join('')).join('')}</div>
+    <div class="c3"><div class="sub">어떤 문항</div>
+      ${counts.map(([k, c]) => `<label class="opt"><input type="radio" name="kind" value="${k}" ${k === st.kind ? 'checked' : ''}> ${k} <small>${keys.length ? c : ''}</small></label>`).join('')}
+      <div class="sub" style="margin-top:12px">문항 수</div><span class="exseg">${['10', '20', '25', '30', '전부'].map(x => `<a href="javascript:void 0" data-n="${x}" class="${x === st.n ? 'on' : ''}">${x}</a>`).join('')}</span>
+      <label class="opt" style="margin-top:12px"><input type="checkbox" id="upSh" ${st.shuffle ? 'checked' : ''}> 섞어서</label>
+      <label class="opt"><input type="checkbox" id="upTm" ${st.timer ? 'checked' : ''}> 타이머 <small>25문항당 40분</small></label>
+      <button class="btn btn-p" id="upGo" style="width:100%;justify-content:center;margin-top:12px" ${keys.length && got.length ? '' : 'disabled'}>${keys.length ? (got.length ? got.length + '문항 시작' : '고른 조건에 맞는 문항이 없습니다') : '소단원을 고르세요'}</button>
+      ${keys.length && got.length && st.n !== '전부' && got.length < +st.n ? `<div class="sub" style="margin-top:6px">조건에 맞는 문항이 ${got.length}개뿐이에요</div>` : ''}</div></div>`;
+  view.querySelectorAll('[data-m]').forEach(a => a.onclick = () => { st.m = +a.dataset.m; save(); history.replaceState(null, '', `#/과목/${S0.code}/단원/${st.m}`); unitPick(S0, head); });
+  view.querySelectorAll('[data-k]').forEach(c => c.onchange = () => { const s = new Set(st.keys); c.checked ? s.add(c.dataset.k) : s.delete(c.dataset.k); st.keys = [...s]; save(); unitPick(S0, head); });
+  document.getElementById('upAll').onclick = () => { const live = mySubs.filter(k => qsOfKeys([k]).length); const all = live.every(k => st.keys.includes(k)); st.keys = all ? st.keys.filter(k => !live.includes(k)) : [...new Set(st.keys.concat(live))]; save(); unitPick(S0, head); };
+  view.querySelectorAll('input[name=kind]').forEach(r => r.onchange = () => { st.kind = r.value; save(); unitPick(S0, head); });
+  view.querySelectorAll('[data-n]').forEach(a => a.onclick = () => { st.n = a.dataset.n; save(); unitPick(S0, head); });
+  document.getElementById('upSh').onchange = e => { st.shuffle = e.target.checked; save(); };
+  document.getElementById('upTm').onchange = e => { st.timer = e.target.checked; save(); };
+  document.getElementById('upGo').onclick = () => {
+    const ids = pickIds({keys, kind: st.kind, n: st.n, shuffle: st.shuffle});
+    const names = M.mids.flatMap(d => d.subs).filter(s => keys.includes(s.key)).map(s => s.name);
+    startSess(`${names.length > 1 ? names[0] + ' 외 ' + (names.length - 1) : names[0]} · ${st.kind}`, ids, st.timer);
+  };
+}
+
+// 오답노트: 틀림 · 헷갈림 · 북마크 · 메모 → 섞어 풀기
+function noteV(tab){
+  document.body.classList.remove('done'); crumbSet('오답노트'); tab = tab || '틀림';
+  const h = solveLog(), lists = {'틀림': wrongIds(h), '헷갈림': [...loadSet('sc.unsure')].filter(id => byId[id]), '북마크': [...loadSet('sc.bm')].filter(id => byId[id]), '메모': memoIds()};
+  const ids = lists[tab] || [];
+  view.innerHTML = `<h1>오답노트</h1><div class="menu">${Object.keys(lists).map(k => `<a class="${k === tab ? 'on' : ''}" href="#/오답노트/${k}">${k} ${lists[k].length}</a>`).join('')}</div>
+    <div class="check" style="justify-content:flex-start;gap:8px;flex-wrap:wrap;margin:8px 0">
+      <button class="btn btn-p" id="nGo" ${ids.length ? '' : 'disabled'}>${tab} ${ids.length}문항 섞어 풀기</button>
+      <label class="opt" style="margin:0"><input type="checkbox" id="nTm"> 타이머</label></div>
+    ${tab === '틀림' ? '<p class="exnote">틀린 문항은 두 번 연달아 맞히면 저절로 빠집니다.</p>' : ''}
+    ${ids.length ? qRows(ids, tab === '틀림' ? id => { const l = h[id] || []; return `틀림 ${l.filter(x => !x.ok).length}번 · 최근 ${l.slice(-3).map(x => x.ok ? '○' : '✕').join('')}`; } : null) : '<p class="exnote">아직 없습니다.</p>'}`;
+  document.getElementById('nGo').onclick = () => startSess(`오답노트 · ${tab}`, pickIds({ids, n: '전부', shuffle: true}), document.getElementById('nTm').checked);
+}
+
+// 도구: 과목과 상관없는 것 — 개념 카드 · 타이머 · 메모장 · 플래시카드 · 실험 앱(과학 앱 L-115 것을 그대로)
+function toolV(){
+  document.body.classList.remove('done'); crumbSet('도구');
+  const T = [['개념 카드', '#/목록/개념', '개념 108장'], ['타이머', SCIENCE_APP, '최과학 과학 앱'], ['메모장', SCIENCE_APP, '최과학 과학 앱'], ['플래시카드', SCIENCE_APP, '9,000장이 넘는 카드'], ['실험 앱', SCIENCE_APP, '중화 반응 · 단진동 등']];
+  view.innerHTML = `<h1>공부 도구</h1><div class="g6">${T.map(([t, href, s]) => `<a class="ucard" href="${href}" ${href.startsWith('http') ? 'target="_blank" rel="noopener"' : ''}><b>${t}</b><small>${s}</small></a>`).join('')}</div>
+    <p class="exnote">문항에 단 메모는 오답노트 「메모」에 모입니다.</p>`;
+}
+
+// 마이: 오늘의 10문항 설정 · 단원별 정답률 · 로그아웃
+function myV(){
+  document.body.classList.remove('done'); crumbSet('마이');
+  const set = todaySet(), h = solveLog();
+  const rows = UNITS.flatMap(s => subsOf(s).map(u => { const qs = qsOfKeys([u.key]); let a = 0, c = 0; qs.forEach(q => (h[q.id] || []).forEach(x => { a++; if (x.ok) c++; })); return a ? `<tr><td>${esc(s.name)}</td><td>${esc(u.name)}</td><td>${a}번</td><td><b>${pct(c, a)}</b></td></tr>` : ''; })).join('');
+  view.innerHTML = `<h1>마이</h1>
+    <h2 class="exh2">오늘의 문항</h2>
+    <label class="opt"><input type="checkbox" id="myOn" ${set.on ? 'checked' : ''}> 홈에 오늘의 문항 보이기</label>
+    <div class="sub" style="margin-top:8px">하루 문항 수</div><span class="exseg">${[5, 10, 20].map(n => `<a href="javascript:void 0" data-tn="${n}" class="${n === set.n ? 'on' : ''}">${n}</a>`).join('')}</span>
+    <p class="exnote">틀린 것 → 헷갈림 · 북마크 → 안 푼 것 차례로 골라 줍니다.</p>
+    <h2 class="exh2">단원별 정답률</h2>${rows ? `<table class="extab"><thead><tr><th>과목</th><th>소단원</th><th>푼 횟수</th><th>정답률</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="exnote">아직 푼 문항이 없습니다.</p>'}
+    <div style="margin-top:24px"><button class="btn btn-s" id="myOut">로그아웃</button></div>`;
+  const save = s => { try { localStorage.setItem('sc.todaySet', JSON.stringify(s)); } catch(e){} myV(); };
+  document.getElementById('myOn').onchange = e => save(Object.assign(set, {on: e.target.checked}));
+  view.querySelectorAll('[data-tn]').forEach(a => a.onclick = () => save(Object.assign(set, {n: +a.dataset.tn})));
+  document.getElementById('myOut').onclick = async () => { try { await sb.auth.signOut(); } catch(e){} location.reload(); };
+}
+
 function route(){
   const h = decodeURIComponent(location.hash.slice(1) || '/');
-  const [, kind, arg] = h.split('/');
+  const p = h.split('/'), kind = p[1], arg = p[2];
   closePanel();   // 화면이 바뀌면 패널은 닫는다(패널 안 개념 이동은 주소를 바꾸지 않음)
-  window.scExamStop();
-  if (kind === '시험'){ document.body.classList.remove('done'); window.scExam(arg, h.split('/')[3], h.split('/')[4]); }
+  window.scExamStop(); clearInterval(sesClock);
+  sideNav();
+  if (kind === '시험'){ document.body.classList.remove('done'); crumbSet('시험'); window.scExam(arg, p[3], p[4]); }
   else if (kind === '문항') problem(arg);
   else if (kind === '개념') concept(arg);
   else if (kind === '목록') home(arg);
-  else { document.body.classList.remove('done'); home(); }
+  else if (kind === '과목') subjectV(arg, p[3], p[4]);
+  else if (kind === '풀기') sessEnd();
+  else if (kind === '오답노트') noteV(arg);
+  else if (kind === '도구') toolV();
+  else if (kind === '마이') myV();
+  else homeV();
   window.scrollTo(0, 0);
+  examCount().then(l => { const b = document.getElementById('sideExam'); if (b) b.textContent = l.length || ''; });
 }
 window.scUI = { ICON, loadSet, saveSet, openMemo, openComm, openAI, solHTML, wireJump, relHTML,
   toolsHTML, resultHTML, statInner, fillStats, tailHTML, wireItem, loadAttempts, esc, UNAME,

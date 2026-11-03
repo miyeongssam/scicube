@@ -77,7 +77,7 @@ async function loadData() {
   const Q = live.map(q => {
     const rows = (byQ[q.id] || []).sort((a, b) => (a.role === 'related') - (b.role === 'related'));
     return {
-      id: q.id, '순서': q.sort_order, '출처': q.source_label, '자료유형': q.item_type || '', '소단원': q.unit, '배점': q.points == null ? '' : String(q.points), '정답': q.answer,
+      id: q.id, '순서': q.sort_order, '출처': q.source_label, '자료유형': q.item_type || '', '소단원': q.unit, '단원키': q.unit_key || (q.subject_code + ':' + q.unit), '배점': q.points == null ? '' : String(q.points), '정답': q.answer,
       '문제': fix(q.stem_html), '선지': q.choices, '해설': fix(q.explain_html), '보기해설': fix(q.bogi_html), '더': fix(q.more_html),
       '관련': rows.map(r => ({ '말': r.label || r.concept, '카드': r.concept })), '참고': q.refs,
       '메타': { '학년': q.grade || '', '시험종류': q.exam_type || '', '출제기관': q.agency || '', '연도': q.year == null ? '' : String(q.year), '월': q.month == null ? '' : String(q.month), '원과목': q.orig_subject || '', '교육과정': q.curriculum || '' },
@@ -163,7 +163,7 @@ async function adminScreen(msg) {
 function startApp(isAdmin) {
   gate.style.display = 'none'; layout.style.display = '';
   const s = document.createElement('script');
-  s.src = 'app.js?v=6';
+  s.src = 'app.js?v=7';
   window.scIsAdmin = isAdmin;
   document.body.appendChild(s);
   const top = document.querySelector('.top .in');

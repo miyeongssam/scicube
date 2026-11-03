@@ -43,11 +43,14 @@ window.scSync = (function () {
     }
   }
 
+  const putExam = rows => put('sc.examAtt', rows.filter(r => r.set_id).map(r => ({ q: r.question_id, ok: !!r.correct, at: r.solved_at })));
+
   async function pull() {
     const [rows, ms, notes] = await Promise.all([
       all('attempts', 'question_id,picked,correct,seconds,marks,client_id,solved_at,set_id', 'solved_at'),
       all('user_marks', 'question_id,kind'), all('user_notes', 'question_id,html')]);
-    // 시험 풀이는 시험 화면에서만 본다. 연습 풀이만 문제 화면에 되살린다
+    // 시험 풀이는 시험 화면에서만 본다. 연습 풀이만 문제 화면에 되살린다. 시험 풀이는 오답노트 · 정답률용으로 따로 둔다
+    putExam(rows);
     const practice = rows.filter(r => !r.set_id);
     const local = get('sc.attempts', []), seen = new Set(practice.map(r => r.client_id));
     const merged = practice.map(r => ({ id: r.client_id, sent: true, 날짜: r.solved_at, 문항: r.question_id, 고른답: r.picked, 맞음: r.correct, 초: r.seconds,
@@ -84,6 +87,8 @@ window.scSync = (function () {
       if (html && html.replace(/<[^>]+>/g, '').trim()) await sb.from('user_notes').upsert({ user_id: uid, question_id: qid, html, updated_at: new Date().toISOString() });
       else await sb.from('user_notes').delete().eq('user_id', uid).eq('question_id', qid);
     },
+    // 시험을 낸 뒤 오답노트 · 정답률을 바로 맞춘다
+    async exams() { if (!uid) return; try { putExam(await all('attempts', 'question_id,correct,solved_at,set_id', 'solved_at')); } catch (e) {} },
     async stats(qid) { const { data } = await sb.rpc('question_stats', { p_id: qid }); return data; }
   };
 })();

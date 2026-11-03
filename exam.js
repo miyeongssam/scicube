@@ -110,7 +110,6 @@
       wire();
     };
     v().innerHTML = `<h1>시험 목록</h1>
-      <div class="tabs"><a class="tab" href="#/">문제</a><a class="tab" href="#/목록/개념">개념 카드</a><a class="tab on" href="#/시험">시험</a></div>
       <h2 class="exh2">아직 안 푼 시험</h2>${todo || '<p class="exnote">지금 새로 풀 시험이 없습니다.</p>'}
       <h2 class="exh2">문제풀이 이력</h2><div id="exHist">${hist.length ? '' : '<p class="exnote">아직 푼 시험이 없습니다.</p>'}</div>`;
     if (hist.length) draw(); else wire();
@@ -214,6 +213,7 @@
       closeAsk();
       try { localStorage.removeItem(akey); localStorage.removeItem(skey); } catch (y) {}
       setViewTry(id, x.try); cache = null;
+      if (window.scSync.exams) window.scSync.exams();
       location.hash = `#/시험/${id}/답안지`;
     };
     // 제출 확인 창: 답한 수 · 안 푼 번호(누르면 그 문항) · 주의 문구

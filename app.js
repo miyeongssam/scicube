@@ -676,17 +676,22 @@ function route(){
   const p = h.split('/'), kind = p[1], arg = p[2];
   closePanel();   // 화면이 바뀌면 패널은 닫는다(패널 안 개념 이동은 주소를 바꾸지 않음)
   window.scExamStop(); clearInterval(sesClock);
-  sideNav();
-  if (kind === '시험'){ document.body.classList.remove('done'); crumbSet('시험'); window.scExam(arg, p[3], p[4]); }
-  else if (kind === '문항') problem(arg);
-  else if (kind === '개념') concept(arg);
-  else if (kind === '목록') home(arg);
-  else if (kind === '과목') subjectV(arg, p[3], p[4]);
-  else if (kind === '풀기') sessEnd();
-  else if (kind === '오답노트') noteV(arg);
-  else if (kind === '도구') toolV();
-  else if (kind === '마이') myV();
-  else homeV();
+  // 화면을 그리다 오류가 나면 빈 화면 대신 오류 글을 보인다(원장 11/04 갤럭시에서 빈 화면 — 원인 찾기용)
+  try {
+    sideNav();
+    if (kind === '시험'){ document.body.classList.remove('done'); crumbSet('시험'); window.scExam(arg, p[3], p[4]); }
+    else if (kind === '문항') problem(arg);
+    else if (kind === '개념') concept(arg);
+    else if (kind === '목록') home(arg);
+    else if (kind === '과목') subjectV(arg, p[3], p[4]);
+    else if (kind === '풀기') sessEnd();
+    else if (kind === '오답노트') noteV(arg);
+    else if (kind === '도구') toolV();
+    else if (kind === '마이') myV();
+    else homeV();
+  } catch (err) {
+    view.innerHTML = `<h1>화면을 그리지 못했습니다</h1><p class="sub">이 화면을 찍어 원장님께 보내 주세요.</p><pre style="white-space:pre-wrap;font-size:13px;background:var(--soft);padding:12px;border-radius:8px">${esc(h)}\n${esc(err && (err.stack || err.message) || err)}\n${esc(navigator.userAgent)}</pre>`;
+  }
   window.scrollTo(0, 0);
   examCount().then(l => { const b = document.getElementById('sideExam'); if (b) b.textContent = l.length || ''; });
 }

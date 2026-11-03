@@ -1,0 +1,20 @@
+/* 사이큐브 앱 설치 안내 모양(pwa-install-guide 모듈, 색은 사이큐브 파랑) */
+:root{--ig-accent:#2F6BFF;--ig-accent-text:#fff;--ig-warn:#C2410C;--ig-surface:#fff;--ig-text:#111;--ig-note:#EEF3FF;--ig-bottom:0px}
+.ig-bar{position:fixed;left:50%;bottom:calc(16px + var(--ig-bottom) + env(safe-area-inset-bottom));z-index:50;display:flex;align-items:center;gap:4px;max-width:calc(100% - 24px);padding:4px 6px 4px 16px;border-radius:999px;background:var(--ig-accent);color:var(--ig-accent-text);box-shadow:0 6px 18px rgba(0,0,0,.25);transform:translateX(-50%)}
+.ig-bar.ig-warn{background:var(--ig-warn);color:#fff}
+.ig-bar.ig-new{bottom:calc(76px + env(safe-area-inset-bottom));background:#111;padding:4px 16px}
+.ig-bar button{border:0;background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer}
+.ig-go{min-height:44px;padding:0 4px;font-size:15px;white-space:nowrap}
+.ig-x{min-width:40px;min-height:40px;border-radius:50%;opacity:.85}
+.ig-wrap{position:fixed;inset:0;z-index:60;display:flex;align-items:flex-end;justify-content:center;padding:16px 16px calc(16px + env(safe-area-inset-bottom));background:rgba(0,0,0,.45)}
+.ig-modal{width:100%;max-width:440px;max-height:85vh;overflow-y:auto;padding:18px 16px 16px;border-radius:16px;background:var(--ig-surface);color:var(--ig-text);line-height:1.6}
+@media (min-width:600px){.ig-wrap{align-items:center}}
+.ig-modal h2{margin:0 0 6px;font-size:19px}
+.ig-steps{margin:10px 0 12px;padding-left:22px;line-height:1.8}
+.ig-note{margin:10px 0;padding:10px 12px;border-radius:12px;background:var(--ig-note);font-size:14px}
+.ig-small{font-size:13px;opacity:.75}
+.ig-input{width:100%;margin:10px 0 6px;padding:10px 12px;border:1px solid rgba(127,127,127,.4);border-radius:10px;background:transparent;color:inherit;font:inherit}
+.ig-btn{min-height:44px;padding:0 14px;border:1px solid rgba(127,127,127,.4);border-radius:10px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.ig-primary{background:var(--ig-accent);border-color:var(--ig-accent);color:var(--ig-accent-text);font-weight:700}
+.ig-block{display:block;width:100%;margin-top:8px}
+.ig-btns{display:flex;gap:8px;margin-top:14px}.ig-btns .ig-btn{flex:1}

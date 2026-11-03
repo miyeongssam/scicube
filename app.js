@@ -661,10 +661,13 @@ function myV(){
     <div class="sub" style="margin-top:8px">하루 문항 수</div><span class="exseg">${[5, 10, 20].map(n => `<a href="javascript:void 0" data-tn="${n}" class="${n === set.n ? 'on' : ''}">${n}</a>`).join('')}</span>
     <p class="exnote">틀린 것 → 헷갈림 · 북마크 → 안 푼 것 차례로 골라 줍니다.</p>
     <h2 class="exh2">단원별 정답률</h2>${rows ? `<table class="extab"><thead><tr><th>과목</th><th>소단원</th><th>푼 횟수</th><th>정답률</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="exnote">아직 푼 문항이 없습니다.</p>'}
+    <h2 class="exh2">앱으로 설치</h2><p class="exnote">휴대폰 · 아이패드 홈 화면이나 컴퓨터 바탕 화면에 사이큐브를 앱으로 깔 수 있어요.</p>
+    <button class="btn btn-p" id="myInst">📲 앱 설치 방법</button>
     <div style="margin-top:24px"><button class="btn btn-s" id="myOut">로그아웃</button></div>`;
   const save = s => { try { localStorage.setItem('sc.todaySet', JSON.stringify(s)); } catch(e){} myV(); };
   document.getElementById('myOn').onchange = e => save(Object.assign(set, {on: e.target.checked}));
   view.querySelectorAll('[data-tn]').forEach(a => a.onclick = () => save(Object.assign(set, {n: +a.dataset.tn})));
+  document.getElementById('myInst').onclick = () => window.InstallGuide && window.InstallGuide.help();
   document.getElementById('myOut').onclick = async () => { try { await sb.auth.signOut(); } catch(e){} location.reload(); };
 }
 

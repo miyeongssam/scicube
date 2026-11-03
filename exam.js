@@ -39,7 +39,14 @@
 .exseg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden}
 .exseg a{padding:6px 12px;font-size:14px;color:var(--text)}
 .exseg a+a{border-left:1px solid var(--line)}
-.exseg a.on{background:var(--primary);color:#fff}`;
+.exseg a.on{background:var(--primary);color:#fff}
+.exh2{font-size:18px;margin:24px 0 10px}
+.extab{width:100%;border-collapse:collapse;font-size:15px}
+.extab th{text-align:left;font-weight:600;color:var(--sub);font-size:14px;padding:8px;border-bottom:2px solid var(--line);cursor:pointer;user-select:none;white-space:nowrap}
+.extab th:last-child{cursor:default}
+.extab td{padding:10px 8px;border-bottom:1px solid var(--line)}
+.extab .exact{white-space:nowrap;text-align:right}
+@media(max-width:760px){.extab{font-size:13px}.extab th,.extab td{padding:6px 4px}}`;
   document.head.appendChild(st);
   const NUM = ['', '①', '②', '③', '④', '⑤'];
   const e = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -68,33 +75,49 @@
     return h => (h || '').replace(/src="img\/([^"]+)"/g, (m, k) => `src="${urls[k] || ''}"`);
   }
 
-  // 시험 목록: 안 푼 시험 [시작하기] · 푸는 중 [이어 풀기] · 본 시험 [복습하기] [다시 풀기] + 풀이 기록 줄
+  // 시험 목록(원장 11/03 밤): 위 = 아직 안 푼 시험 [시작하기] · 푸는 중 [이어 풀기]
+  // 아래 = 문제풀이 이력 표 — 줄 하나가 한 번 푼 것. 번호 · 시험명 · 점수 · 걸린 시간 · 맞힘 · 풀이 횟수 · 푼 날짜 · [복습] [다시 풀기]
+  // 머리 칸을 누르면 그 칸으로 정렬(파일 탐색기처럼), 한 번 더 누르면 거꾸로
+  const SKEY = 'sc.exam.sort';
+  let sortBy = (() => { try { return JSON.parse(sessionStorage.getItem(SKEY)) || { k: 'at', d: -1 }; } catch (x) { return { k: 'at', d: -1 }; } })();
   async function list() {
     stopClock();
     v().innerHTML = '<p class="exnote">시험 목록을 불러오는 중입니다…</p>';
     const { data, error } = await sb.rpc('exam_list');
     if (error) { v().innerHTML = '<p>시험 목록을 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>'; return; }
     const admin = !!window.scIsAdmin;
-    const rows = data.map(s => {
-      const tries = s.tries || [], last = tries[tries.length - 1];
-      let btns = '';
-      if (s.started && s.open) btns = `<a class="btn btn-p" href="#/시험/${e(s.id)}">이어 풀기</a>`;
-      else if (tries.length) btns = `<a class="btn btn-s" href="#/시험/${e(s.id)}/답안지/1" data-rv="${e(s.id)}" data-t="${last.try}">복습하기</a>`
-        + (s.open ? ` <a class="btn btn-s" href="javascript:void 0" data-retry="${e(s.id)}" data-n="${tries.length + 1}">다시 풀기</a>` : '');
-      else if (s.open) btns = `<a class="btn btn-p" href="#/시험/${e(s.id)}">${admin && s.status !== 'published' ? '미리 풀기' : '시작하기'}</a>`;
-      const info = `${s.count}문항${s.minutes ? ' · ' + s.minutes + '분' : ''}${s.open && s.closes_at ? ' · ' + when(s.closes_at) + '까지' : ''}${!s.open ? ' · 닫힘' : ''}${admin ? ' · ' + e(s.status) : ''}`;
-      const hist = tries.length ? `<div class="exhist">${tries.map(t => `<a href="#/시험/${e(s.id)}/답안지" data-rv="${e(s.id)}" data-t="${t.try}">${t.try}번째</a><span>${day(t.at)}</span><b>${t.score}점</b><span>${mmss(t.secs)}</span><span>${t.count}문항 중 ${t.correct}문항 맞힘</span>`).join('')}</div>` : '';
-      return `<div class="exrow"><div class="top"><div class="grow"><b>${e(s.name)}</b><div class="exnote">${info}</div></div>${btns}</div>${hist}</div>`;
-    }).join('');
-    v().innerHTML = `<h1>시험</h1><div class="sub">선생님이 보낸 시험과 내가 본 시험</div>
+    const todo = data.filter(s => s.open && (s.started || !(s.tries || []).length)).map(s => `<div class="exrow"><div class="top"><div class="grow"><b>${e(s.name)}</b>
+        <div class="exnote">${s.count}문항${s.minutes ? ' · ' + s.minutes + '분' : ''}${s.closes_at ? ' · ' + when(s.closes_at) + '까지' : ''}${admin ? ' · ' + e(s.status) : ''}</div></div>
+        <a class="btn btn-p" href="#/시험/${e(s.id)}">${s.started ? '이어 풀기' : admin && s.status !== 'published' ? '미리 풀기' : '시작하기'}</a></div></div>`).join('');
+    const hist = data.flatMap(s => (s.tries || []).map(t => ({ id: s.id, name: s.name, open: s.open, next: (s.tries || []).length + 1, ...t })))
+      .sort((a, b) => String(a.at).localeCompare(String(b.at))).map((r, i) => ({ ...r, no: i + 1, rate: r.count ? r.correct / r.count : 0 }));
+    const COLS = [['no', '번호'], ['name', '시험명'], ['score', '점수'], ['secs', '걸린 시간'], ['rate', '맞힘'], ['try', '풀이 횟수'], ['at', '푼 날짜']];
+    const draw = () => {
+      const k = sortBy.k, d = sortBy.d;
+      const rows = [...hist].sort((a, b) => { const x = a[k] ?? -1, y = b[k] ?? -1; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * d || (a.no - b.no) * -1; });
+      document.getElementById('exHist').innerHTML = `<table class="extab"><thead><tr>${COLS.map(([c, t]) => `<th data-k="${c}">${t}${c === k ? (d > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}<th></th></tr></thead><tbody>
+        ${rows.map(r => `<tr><td>${r.no}</td><td>${e(r.name)}</td><td><b>${r.score}점</b></td><td>${mmss(r.secs)}</td><td>${r.correct}/${r.count}</td><td>${r.try}회</td><td>${day(r.at)}</td>
+          <td class="exact"><a class="btn btn-s" href="#/시험/${e(r.id)}/답안지/1" data-rv="${e(r.id)}" data-t="${r.try}">복습</a>${r.open ? ` <a class="btn btn-s" href="javascript:void 0" data-retry="${e(r.id)}" data-n="${r.next}">다시 풀기</a>` : ''}</td></tr>`).join('')}</tbody></table>`;
+      document.querySelectorAll('#exHist th[data-k]').forEach(h => h.onclick = () => {
+        sortBy = sortBy.k === h.dataset.k ? { k: h.dataset.k, d: -sortBy.d } : { k: h.dataset.k, d: h.dataset.k === 'name' ? 1 : -1 };
+        try { sessionStorage.setItem(SKEY, JSON.stringify(sortBy)); } catch (x) {}
+        draw();
+      });
+      wire();
+    };
+    v().innerHTML = `<h1>시험 목록</h1>
       <div class="tabs"><a class="tab" href="#/">문제</a><a class="tab" href="#/목록/개념">개념 카드</a><a class="tab on" href="#/시험">시험</a></div>
-      ${rows || '<p class="exnote">지금 풀 수 있는 시험이 없습니다.</p>'}`;
-    v().querySelectorAll('[data-rv]').forEach(a => a.addEventListener('click', () => { setViewTry(a.dataset.rv, +a.dataset.t); setWrongOnly(false); cache = null; }));
+      <h2 class="exh2">아직 안 푼 시험</h2>${todo || '<p class="exnote">지금 새로 풀 시험이 없습니다.</p>'}
+      <h2 class="exh2">문제풀이 이력</h2><div id="exHist">${hist.length ? '' : '<p class="exnote">아직 푼 시험이 없습니다.</p>'}</div>`;
+    if (hist.length) draw();
+  }
+  function wire() {
+    v().querySelectorAll('[data-rv]').forEach(a => a.onclick = () => { setViewTry(a.dataset.rv, +a.dataset.t); setWrongOnly(false); cache = null; });
     v().querySelectorAll('[data-retry]').forEach(a => a.onclick = () => {
       const m = document.createElement('div');
       m.className = 'exmask'; m.id = 'exM';
       m.innerHTML = `<div class="exbox" role="dialog" aria-modal="true"><h3>처음부터 다시 풀까요?</h3>
-        <p>${a.dataset.n}번째 풀이로 새로 시작합니다.</p><p class="exnote">앞에서 푼 기록과 점수는 그대로 남습니다.</p>
+        <p>${a.dataset.n}회 풀이로 새로 시작합니다.</p><p class="exnote">앞에서 푼 기록과 점수는 그대로 남습니다.</p>
         <div class="btns"><button class="btn btn-s" id="exMB">취소</button><button class="btn btn-p" id="exMS">다시 풀기</button></div></div>`;
       document.body.appendChild(m);
       m.onclick = ev => { if (ev.target === m) m.remove(); };
@@ -116,7 +139,7 @@
     const akey = key(id, x.try), skey = akey + '.s';
     const ans = getJ(akey), secs = getJ(skey);
     let cur = 0;
-    v().innerHTML = `<h1>${e(x.name)}${x.try > 1 ? ` <span class="exnote">${x.try}번째 풀이</span>` : ''}</h1>
+    v().innerHTML = `<h1>${e(x.name)}${x.try > 1 ? ` <span class="exnote">${x.try}회 풀이</span>` : ''}</h1>
       <div class="exhead"><span class="extime" id="exT"></span><span class="exnote" id="exC"></span><span style="flex:1"></span><button class="btn btn-p" id="exGo">제출하기</button>
         <div class="exomr" id="exO">${x.items.map((q, i) => `<a href="javascript:void 0" data-i="${i}">${q.no}</a>`).join('')}</div></div>
       <div id="exP"></div>`;
@@ -239,8 +262,8 @@
       v().innerHTML = `<h1>시험 결과</h1><div class="exscore">${r.score}점</div><p>맞힌 문항 ${r.correct} / ${r.count}</p><p class="exnote">이 시험은 닫혀서 문제와 해설은 볼 수 없습니다.</p><a class="btn btn-s" href="#/시험">시험 목록</a>`;
       return;
     }
-    v().innerHTML = `<div class="omrpage"><div class="excrumb"><a href="#/시험">시험</a> › <b>${e(r.name)}</b> › ${r.try}번째 풀이</div>
-      <div class="exres"><div class="excard"><div class="sub">${day(r.at)} · ${r.try}번째</div><div class="exscore">${r.score}점</div>
+    v().innerHTML = `<div class="omrpage"><div class="excrumb"><a href="#/시험">시험 목록</a> › <b>${e(r.name)}</b> › ${r.try}회 풀이</div>
+      <div class="exres"><div class="excard"><div class="sub">${r.try}회 풀이 · ${day(r.at)}</div><div class="exscore">${r.score}점</div>
           <div class="sub">${r.count}문항 중 ${r.correct}문항 맞힘<br>걸린 시간 ${mmss(r.elapsed)}</div>
           <a class="btn btn-p" href="#/시험/${e(id)}/답안지/${r.items[0].no}" id="exAll">복습하기</a>
           <a class="btn btn-s" href="#/시험">시험 목록</a></div>
@@ -262,10 +285,10 @@
     const U = window.scUI;
     window.scExamQ = q.id; window.scExamSrc = q.source;
     document.body.classList.add('done');
-    window.scExamSheet = () => U.panelOpen('답안지', `<div class="sub">${e(r.name)} · ${r.try}번째 · ${r.score}점</div>` + omrHTML(r, id, q.no));
+    window.scExamSheet = () => U.panelOpen('답안지', `<div class="sub">${e(r.name)} · ${r.try}회 풀이 · ${r.score}점</div>` + omrHTML(r, id, q.no));
     const times = U.loadAttempts().filter(a => a['문항'] === q.id).length + r.try;
     const firstBad = r.items.find(x => !x.ok);
-    v().innerHTML = `<div class="bar1"><div class="excrumb"><a href="#/시험">시험</a> › <a href="#/시험/${e(id)}/답안지">${e(r.name)}</a> › <b>${r.try}번째 풀이(${day(r.at)} · ${r.score}점)</b></div>
+    v().innerHTML = `<div class="bar1"><div class="excrumb"><a href="#/시험">시험 목록</a> › <a href="#/시험/${e(id)}/답안지">${e(r.name)}</a> › <b>${r.try}회 풀이 · ${r.score}점</b></div>
         <div class="nav"><a class="ic" ${prev ? `href="${href(prev)}"` : 'style="color:var(--line)"'}>‹</a><span>${i + 1} / ${seq.length}</span>
           <a class="ic" ${next ? `href="${href(next)}"` : 'style="color:var(--line)"'}>›</a></div></div>
       <div style="display:flex;justify-content:flex-end;margin:8px 0"><span class="exseg">

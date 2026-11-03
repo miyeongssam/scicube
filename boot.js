@@ -10,10 +10,25 @@ const layout = document.querySelector('.layout');
 function showGate(html) { layout.style.display = 'none'; gate.style.display = 'block'; gate.innerHTML = `<div class="gatebox"><div class="gatelogo">사이큐브</div>${html}</div>`; }
 function inApp() { return /KAKAOTALK|Instagram|FBAN|FBAV|NAVER|Line\//i.test(navigator.userAgent); }
 
+// 앱 안 브라우저 → 바깥 브라우저로 넘기기. 카톡은 iOS · 안드로이드 모두 openExternal, 그 밖의 안드로이드는 크롬 intent
+function outerUrl() {
+  const u = location.origin + location.pathname;
+  if (/KAKAOTALK/i.test(navigator.userAgent)) return 'kakaotalk://web/openExternal?url=' + encodeURIComponent(u);
+  if (/Android/i.test(navigator.userAgent)) return 'intent://' + location.host + location.pathname + '#Intent;scheme=https;package=com.android.chrome;end';
+  return '';
+}
+
 function loginScreen(msg) {
   if (inApp()) {
+    const out = outerUrl();
     showGate(`<p>카카오톡 등 앱 안의 브라우저에서는 구글 로그인이 막혀 있습니다.</p>
-      <p><b>이 주소를 복사해 크롬이나 사파리에서 열어 주세요.</b></p><p class="gatesub">${location.origin}</p>`);
+      ${out ? `<button class="gatebtn" id="goOut">크롬 · 사파리로 열기</button>` : ''}
+      <button class="gatebtn gatesec" id="copyUrl">주소 복사하기</button>
+      <p class="gatesub">열리지 않으면 주소를 복사해 크롬이나 사파리에 붙여 넣어 주세요.<br>${location.origin}</p>`);
+    if (out) { document.getElementById('goOut').onclick = () => { location.href = out; }; location.href = out; }
+    document.getElementById('copyUrl').onclick = async e => {
+      try { await navigator.clipboard.writeText(location.origin); e.target.textContent = '복사했습니다'; } catch (_) { prompt('주소를 길게 눌러 복사하세요', location.origin); }
+    };
     return;
   }
   showGate(`${msg ? `<p class="gateerr">${msg}</p>` : ''}

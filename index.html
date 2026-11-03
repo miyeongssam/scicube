@@ -48,7 +48,8 @@ body.panel-open .panel{display:block}
 .sbadge{background:var(--danger);color:#fff;border-radius:10px;font-size:12px;line-height:18px;padding:0 6px;font-weight:600}.sbadge:empty{display:none}
 @media (max-width:1299px){ body.panel-open .side{display:none} }
 @media (max-width:899px){
-  .layout{flex-wrap:wrap}
+  .layout{flex-direction:column;align-items:stretch}   /* 위쪽 메뉴 아래로 본문 — 가로로 두면 본문 너비가 0(원장 11/04 갤럭시 빈 화면) */
+  .main{width:100%}
   .side{position:sticky;top:56px;z-index:15;width:100%;height:auto;display:flex;gap:4px;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:6px 8px}
   .si{white-space:nowrap;padding:6px 10px;font-size:15px;margin:0}.sh{display:none}
 }

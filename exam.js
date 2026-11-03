@@ -90,8 +90,9 @@
     if (error) { v().innerHTML = '<p>시험 목록을 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>'; return; }
     const admin = !!window.scIsAdmin;
     const todo = data.filter(s => s.open && (s.started || !(s.tries || []).length)).map(s => `<div class="exrow"><div class="top"><div class="grow"><b>${e(s.name)}</b>
-        <div class="exnote">${s.count}문항${s.minutes ? ' · ' + s.minutes + '분' : ''}${s.closes_at ? ' · ' + when(s.closes_at) + '까지' : ''}${admin ? ' · ' + e(s.status) : ''}</div></div>
-        <a class="btn btn-p" href="#/시험/${e(s.id)}">${s.started ? '이어 풀기' : admin && s.status !== 'published' ? '미리 풀기' : '시작하기'}</a></div></div>`).join('');
+        <div class="exnote">${s.count}문항${s.minutes ? ' · ' + s.minutes + '분' : ''}${s.closes_at ? ' · ' + when(s.closes_at) + '까지' : ''}${s.pause_ok ? '' : ' · 멈출 수 없는 시험'}${admin ? ' · ' + e(s.status) : ''}</div>
+        ${s.paused ? `<div class="exnote" style="color:var(--primary)">멈춤 · 남은 시간 ${mmss(s.left)}</div>` : ''}</div>
+        <a class="btn btn-p" href="#/시험/${e(s.id)}" ${!s.started && !s.pause_ok ? `data-warn="${e(s.id)}" data-min="${s.minutes || ''}" data-cnt="${s.count}"` : ''}>${s.started ? '이어 풀기' : admin && s.status !== 'published' ? '미리 풀기' : '시작하기'}</a></div></div>`).join('');
     const hist = data.flatMap(s => (s.tries || []).map(t => ({ id: s.id, name: s.name, open: s.open, next: (s.tries || []).length + 1, ...t })))
       .sort((a, b) => String(a.at).localeCompare(String(b.at))).map((r, i) => ({ ...r, no: i + 1, rate: r.count ? r.correct / r.count : 0 }));
     const COLS = [['no', '번호'], ['name', '시험명'], ['score', '점수'], ['secs', '걸린 시간'], ['rate', '맞힘'], ['try', '풀이 횟수'], ['at', '푼 날짜']];
@@ -99,7 +100,7 @@
       const k = sortBy.k, d = sortBy.d;
       const rows = [...hist].sort((a, b) => { const x = a[k] ?? -1, y = b[k] ?? -1; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * d || (a.no - b.no) * -1; });
       document.getElementById('exHist').innerHTML = `<table class="extab"><thead><tr>${COLS.map(([c, t]) => `<th data-k="${c}">${t}${c === k ? (d > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}<th></th></tr></thead><tbody>
-        ${rows.map(r => `<tr><td>${r.no}</td><td>${e(r.name)}</td><td><b>${r.score}점</b></td><td>${mmss(r.secs)}</td><td>${r.correct}/${r.count}</td><td>${r.try}회</td><td>${day(r.at)}</td>
+        ${rows.map(r => `<tr><td>${r.no}</td><td>${e(r.name)}</td><td><b>${r.score}점</b></td><td>${mmss(r.secs)}${r.pauses ? `<div class="exnote">멈춤 ${r.pauses}번</div>` : ''}</td><td>${r.correct}/${r.count}</td><td>${r.try}회</td><td>${day(r.at)}</td>
           <td class="exact"><a class="btn btn-s" href="#/시험/${e(r.id)}/답안지/1" data-rv="${e(r.id)}" data-t="${r.try}">복습</a>${r.open ? ` <a class="btn btn-s" href="javascript:void 0" data-retry="${e(r.id)}" data-n="${r.next}">다시 풀기</a>` : ''}</td></tr>`).join('')}</tbody></table>`;
       document.querySelectorAll('#exHist th[data-k]').forEach(h => h.onclick = () => {
         sortBy = sortBy.k === h.dataset.k ? { k: h.dataset.k, d: -sortBy.d } : { k: h.dataset.k, d: h.dataset.k === 'name' ? 1 : -1 };
@@ -112,9 +113,25 @@
       <div class="tabs"><a class="tab" href="#/">문제</a><a class="tab" href="#/목록/개념">개념 카드</a><a class="tab on" href="#/시험">시험</a></div>
       <h2 class="exh2">아직 안 푼 시험</h2>${todo || '<p class="exnote">지금 새로 풀 시험이 없습니다.</p>'}
       <h2 class="exh2">문제풀이 이력</h2><div id="exHist">${hist.length ? '' : '<p class="exnote">아직 푼 시험이 없습니다.</p>'}</div>`;
-    if (hist.length) draw();
+    if (hist.length) draw(); else wire();
+  }
+  // 가운데 확인 창 하나(멈춤 · 다시 풀기 · 시작 주의) — 단추 [[글, 할 일, 파랑?], …]
+  function modal(title, body, btns) {
+    const old = document.getElementById('exM'); if (old) old.remove();
+    const m = document.createElement('div');
+    m.className = 'exmask'; m.id = 'exM';
+    m.innerHTML = `<div class="exbox" role="dialog" aria-modal="true"><h3>${title}</h3>${body}<div class="btns" style="flex-wrap:wrap">${btns.map((b, i) => `<button class="btn ${b[2] ? 'btn-p' : 'btn-s'}" data-b="${i}">${b[0]}</button>`).join('')}</div></div>`;
+    document.body.appendChild(m);
+    m.querySelectorAll('[data-b]').forEach(el => el.onclick = () => { m.remove(); btns[+el.dataset.b][1](); });
+    return m;
   }
   function wire() {
+    v().querySelectorAll('[data-warn]').forEach(a => a.onclick = ev => {
+      ev.preventDefault();
+      modal('시험을 시작할까요?', `<p>${a.dataset.cnt}문항${a.dataset.min ? ' · ' + a.dataset.min + '분' : ''}</p>
+        <p><b>이 시험은 한 번 시작하면 멈출 수 없습니다.</b> 시간이 계속 흐르니, 끝까지 풀 수 있을 때 시작하세요.</p>`,
+        [['나중에', () => {}], ['시작하기', () => { location.hash = `#/시험/${a.dataset.warn}`; }, true]]);
+    });
     v().querySelectorAll('[data-rv]').forEach(a => a.onclick = () => { setViewTry(a.dataset.rv, +a.dataset.t); setWrongOnly(false); cache = null; });
     v().querySelectorAll('[data-retry]').forEach(a => a.onclick = () => {
       const m = document.createElement('div');
@@ -140,13 +157,13 @@
     if (retry) history.replaceState(null, '', `#/시험/${id}`);
     const fix = await signed(x.items.map(q => q.stem));
     const akey = key(id, x.try), skey = akey + '.s';
-    const ans = getJ(akey), secs = getJ(skey);
+    const d = x.draft || {}, ans = Object.assign({}, d.answers || {}, getJ(akey)), secs = Object.assign({}, d.seconds || {}, getJ(skey));
     let cur = 0;
     v().innerHTML = `<h1>${e(x.name)}${x.try > 1 ? ` <span class="exnote">${x.try}회 풀이</span>` : ''}</h1>
       <div class="exhead"><span class="extime" id="exT"></span><span class="exnote" id="exC"></span>
         <div class="exbar"><div class="exomr" id="exO">${x.items.map((q, i) => `<a href="javascript:void 0" data-i="${i}">${q.no}</a>`).join('')}</div>
           <span class="exnav"><button class="btn btn-s" id="exTP">‹ 이전</button><span class="exnote" id="exTN"></span><button class="btn btn-s" id="exTX">다음 ›</button>
-            <button class="btn btn-p" id="exGo">제출하기</button></span></div></div>
+            ${x.pause_ok ? '<button class="btn btn-s" id="exPause">⏸ 멈춤</button>' : ''}<button class="btn btn-p" id="exGo">제출하기</button></span></div></div>
       <div id="exP"></div>`;
     const P = document.getElementById('exP');
     const paintBar = () => {
@@ -217,6 +234,25 @@
       m.querySelectorAll('.left a').forEach(a => a.onclick = () => { closeAsk(); show(+a.dataset.i); });
     }
     document.getElementById('exGo').onclick = ask;
+    // 멈춤(원장 11/03): 문제를 가리고 [나중에 이어 풀기] [그만두기] [계속 풀기]. 원장이 보낸 실전 평가(처음 풀이)에는 단추가 없다
+    const pb = document.getElementById('exPause');
+    if (pb) pb.onclick = () => {
+      P.style.visibility = 'hidden';
+      const left = document.getElementById('exT').textContent;
+      modal('시험을 멈출까요?', `<p>남은 시간 <b>${left}</b> · 답한 문항 ${paintBar()} / ${x.items.length}</p>
+        <p class="exnote">이어 풀기: 시험 목록에서 [이어 풀기]를 누르면 남은 시간부터 다시 풉니다. 고른 답도 그대로 남습니다.<br>그만두기: 이번 풀이를 지우고 나갑니다.</p>`,
+        [['계속 풀기', () => { P.style.visibility = ''; }],
+         ['그만두기', () => modal('이번 풀이를 지울까요?', '<p class="exnote">고른 답과 시간이 모두 지워집니다. 다음에 들어오면 처음부터 풉니다.</p>',
+            [['돌아가기', () => { P.style.visibility = ''; }], ['지우고 나가기', async () => {
+              stopClock(); await sb.rpc('exam_quit', { p_set: id });
+              try { localStorage.removeItem(akey); localStorage.removeItem(skey); } catch (y) {}
+              location.hash = '#/시험'; }, true]])],
+         ['나중에 이어 풀기', async () => {
+            stopClock();
+            const { data: r } = await sb.rpc('exam_pause', { p_set: id, p_answers: ans, p_seconds: secs });
+            if (!r || r.result !== 'ok') { alert('멈추지 못했습니다. 다시 눌러 주세요.'); return take(id); }
+            location.hash = '#/시험'; }, true]]);
+    };
     document.getElementById('exTP').onclick = () => show(cur - 1);
     document.getElementById('exTX').onclick = () => show(cur + 1);
     // 키보드 ← → 로도 넘김(글 쓰는 칸에 있을 때 · 확인 창이 떠 있을 때는 빼고)
@@ -232,7 +268,7 @@
       const q = x.items[cur]; secs[q.id] = (secs[q.id] || 0) + 1; putJ(skey, secs);
     }, 1000);
     // 타이머: 서버가 시작을 기록한 때부터. 새로 고침해도 이어진다. 끝나면 저절로 낸다
-    const ends = [x.minutes ? new Date(x.started_at).getTime() + x.minutes * 60000 : null, x.closes_at ? new Date(x.closes_at).getTime() : null].filter(Boolean);
+    const ends = [x.minutes ? new Date(x.started_at).getTime() + (x.minutes * 60 + (x.paused_secs || 0)) * 1000 : null, x.closes_at ? new Date(x.closes_at).getTime() : null].filter(Boolean);
     const end = ends.length ? Math.min(...ends) : null, T = document.getElementById('exT');
     if (end) {
       const tick = () => {

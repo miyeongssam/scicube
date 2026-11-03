@@ -39,13 +39,27 @@
 .exbig.bad{background:rgba(229,72,77,.08);color:var(--danger)}
 .exbig .mk{font-size:30px;line-height:1}
 .exbig .my{font-size:17px;color:var(--text);font-weight:600}
-.exbody h2{margin-top:28px}`;
+.exbody h2{margin-top:28px}
+.exres{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:20px;align-items:start;margin-top:12px}
+@media(max-width:760px){.exres{grid-template-columns:minmax(0,1fr)}.excard{order:-1}}
+.exli{display:grid;grid-template-columns:40px minmax(0,1fr) 160px;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;color:inherit;text-decoration:none}
+.exli:hover{border-color:var(--line-strong)}
+.exli.bad{border-left:4px solid var(--danger)}
+.exln{font-size:20px;font-weight:700}
+.exlt{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.5}
+.exlr .o{color:var(--primary);font-weight:700}.exlr .x{color:var(--danger);font-weight:700}
+.excard{position:sticky;top:80px;border:1px solid var(--line);border-radius:12px;padding:16px}
+.excard .btn{width:100%;justify-content:center;margin-top:8px}
+.excard details{margin-top:14px}.excard summary{cursor:pointer;color:var(--sub);font-size:14px}
+.omrpage .excard .sheet{columns:auto}`;
   document.head.appendChild(st);
   const NUM = ['', '①', '②', '③', '④', '⑤'];
   const e = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const v = () => document.getElementById('view');
-  let clock = null;
-  const stopClock = () => { if (clock) clearInterval(clock); clock = null; const m = document.getElementById('exM'); if (m) m.remove(); };
+  let clock = null, track = null;
+  const stopClock = () => { if (clock) clearInterval(clock); if (track) clearInterval(track); clock = track = null; const m = document.getElementById('exM'); if (m) m.remove(); };
+  const mmss = s => `${Math.floor(s / 60)}분 ${s % 60}초`;
+  const firstLine = h => { const d = document.createElement('template'); d.innerHTML = String(h || '').replace(/<img[^>]*>/g, ' ').replace(/<[^>]+>/g, ' '); return d.content.textContent.replace(/\s+/g, ' ').trim().slice(0, 90); };
   const key = id => 'sc.exam.' + id;
   const loadAns = id => { try { return JSON.parse(localStorage.getItem(key(id)) || '{}'); } catch (x) { return {}; } };
   const saveAns = (id, a) => { try { localStorage.setItem(key(id), JSON.stringify(a)); } catch (x) {} };
@@ -69,7 +83,7 @@
     if (error) { v().innerHTML = '<p>시험 목록을 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>'; return; }
     const admin = !!window.scIsAdmin;
     const rows = data.map(s => {
-      const state = s.submitted ? `<b>${s.score ?? ''} / ${s.total ?? ''}점</b>` : s.open ? (s.started ? '푸는 중' : '') : '닫힘';
+      const state = s.submitted ? `<b>${s.score ?? ''}점</b>` : s.open ? (s.started ? '푸는 중' : '') : '닫힘';
       const go = s.submitted ? (s.open ? `<a class="btn btn-s" href="#/시험/${s.id}/답안지">답안지</a>` : '')
         : s.open ? `<a class="btn btn-p" href="#/시험/${s.id}">${s.started ? '이어 풀기' : admin && s.status !== 'published' ? '미리 풀기' : '시작하기'}</a>` : '';
       return `<div class="exrow"><div class="grow"><b>${e(s.name)}</b><div class="exnote">${s.count}문항${s.minutes ? ' · ' + s.minutes + '분' : ''}${s.closes_at ? ' · ' + when(s.closes_at) + ' 닫힘' : ''}${admin ? ' · ' + e(s.status) : ''}</div></div><span>${state}</span>${go}</div>`;
@@ -87,7 +101,8 @@
     if (x.result !== 'ok') { v().innerHTML = '<p>이 시험은 지금 열려 있지 않습니다.</p><a class="btn btn-s" href="#/시험">시험 목록</a>'; return; }
     if (x.submitted) { location.hash = `#/시험/${id}/답안지`; return; }
     const fix = await signed(x.items.map(q => q.stem));
-    const ans = loadAns(id);
+    const ans = loadAns(id), skey = key(id) + '.s';
+    let secs = {}; try { secs = JSON.parse(localStorage.getItem(skey) || '{}'); } catch (y) {}
     v().innerHTML = `<h1>${e(x.name)}</h1>
       <div class="exhead"><span class="extime" id="exT"></span><span class="exnote" id="exC"></span><span style="flex:1"></span><button class="btn btn-p" id="exGo">제출하기</button>
         <div class="exomr" id="exO">${x.items.map(q => `<a href="javascript:void 0" data-j="${q.no}"></a>`).join('')}</div></div>
@@ -118,7 +133,7 @@
     const closeAsk = () => { const m = document.getElementById('exM'); if (m) m.remove(); };
     const send = async () => {
       if (sending) return; sending = true; stopClock();
-      const { data: r, error: er } = await sb.rpc('exam_submit', { p_set: id, p_answers: ans });
+      const { data: r, error: er } = await sb.rpc('exam_submit', { p_set: id, p_answers: ans, p_seconds: secs });
       if (er || r.result === 'not_started') {
         sending = false;
         const w = document.getElementById('exMW');
@@ -126,7 +141,7 @@
         return;
       }
       closeAsk();
-      try { localStorage.removeItem(key(id)); } catch (y) {}
+      try { localStorage.removeItem(key(id)); localStorage.removeItem(skey); } catch (y) {}
       location.hash = `#/시험/${id}/답안지`;
     };
     // 제출 확인 창: 화면 가운데에 답한 수 · 안 푼 번호 · 주의 문구 (원장 검토 A3)
@@ -149,6 +164,16 @@
     document.getElementById('exGo').onclick = ask;
     document.getElementById('exGo2').onclick = ask;
     paint();
+    // 문항별 시간(원장 11/03 6판 — 내 풀이 시간 · 평균 시간): 1초마다 화면 가운데 위쪽에 있는 문항에 1초를 더한다
+    track = setInterval(() => {
+      if (document.hidden || !document.getElementById('exO')) return;
+      const y = window.innerHeight * 0.4;
+      const box = [...document.querySelectorAll('.exq')].find(d => { const b = d.getBoundingClientRect(); return b.top <= y && b.bottom >= y; });
+      if (!box) return;
+      const q = x.items.find(it => 'exq' + it.no === box.id); if (!q) return;
+      secs[q.id] = (secs[q.id] || 0) + 1;
+      try { localStorage.setItem(skey, JSON.stringify(secs)); } catch (y2) {}
+    }, 1000);
     // 타이머: 서버가 시작을 기록한 때부터. 새로 고침해도 이어진다. 끝나면 저절로 낸다
     const ends = [x.minutes ? new Date(x.started_at).getTime() + x.minutes * 60000 : null, x.closes_at ? new Date(x.closes_at).getTime() : null].filter(Boolean);
     const end = ends.length ? Math.min(...ends) : null, T = document.getElementById('exT');
@@ -193,19 +218,32 @@
     if (c.bad) { v().innerHTML = '<p>제출한 답안이 없습니다.</p><a class="btn btn-s" href="#/시험">시험 목록</a>'; return; }
     const r = c.r;
     if (r.result === 'closed') {
-      v().innerHTML = `<h1>시험 결과</h1><div class="exscore">${r.score} / ${r.total}점</div><p>맞힌 문항 ${r.correct} / ${r.count}</p><p class="exnote">이 시험은 닫혀서 문제와 해설은 볼 수 없습니다.</p><a class="btn btn-s" href="#/시험">시험 목록</a>`;
+      v().innerHTML = `<h1>시험 결과</h1><div class="exscore">${r.score}점</div><p>맞힌 문항 ${r.correct} / ${r.count}</p><p class="exnote">이 시험은 닫혀서 문제와 해설은 볼 수 없습니다.</p><a class="btn btn-s" href="#/시험">시험 목록</a>`;
       return;
     }
-    const firstBad = r.items.find(q => !q.ok);
+    // 결과 화면(원장 11/03 6판 · 결정 D-486): 왼쪽 = 문항 목록(무슨 문제를 틀렸는지), 오른쪽 = 점수만 · 걸린 시간 · 해설 단추.
+    // ○✕ 채점표는 종이에 푼 학생만 쓰므로 접어 둔다
+    const firstBad = r.items.find(q => !q.ok), U = window.scUI;
+    const row = q => `<a class="exli ${q.ok ? '' : 'bad'}" href="#/시험/${e(id)}/답안지/${q.no}" data-all="1">
+        <span class="exln">${q.no}</span>
+        <span class="exlt">${e(firstLine(q.stem))}${q.unit ? ` <span class="sub">· ${e(U.UNAME(q.unit))}</span>` : ''}</span>
+        <span class="exlr">${q.ok ? '<span class="o">○ 맞음</span>' : `<span class="x">✕ ${q.picked ? '내 답 ' + NUM[q.picked] : '답 안 씀'}</span>`}
+          <br><span class="sub">${q.ok ? '' : '정답 ' + NUM[q.answer] + ' · '}정답률 <b data-rate="${e(q.id)}">—</b></span></span></a>`;
     v().innerHTML = `<div class="omrpage"><div class="excrumb"><a href="#/시험">시험</a> › <b>${e(r.name)}</b></div>
-      <div class="exscore">${r.score} / ${r.total}점</div><div class="sub">맞힌 문항 ${r.correct} / ${r.count} · 줄을 누르면 그 문항의 해설이 열립니다</div>
-      ${omrHTML(r, id)}
-      <div class="check" style="justify-content:flex-start;gap:8px;flex-wrap:wrap">
-        <a class="btn btn-p" href="#/시험/${e(id)}/답안지/${r.items[0].no}" id="exAll">1번부터 해설 보기</a>
-        ${firstBad ? `<a class="btn btn-s" href="#/시험/${e(id)}/답안지/${firstBad.no}" id="exBad">틀린 문항만 해설 보기</a>` : ''}
-        <a class="btn btn-s" href="#/시험">‹ 목록으로</a></div></div>`;
+      <div class="exres"><div>${r.items.map(row).join('')}<div class="sub">줄을 누르면 그 문항의 해설이 열립니다</div></div>
+        <aside class="excard"><div class="sub">점수</div><div class="exscore">${r.score}점</div>
+          <div class="sub">${r.count}문항 중 ${r.correct}문항 맞힘${r.elapsed ? ' · 걸린 시간 ' + mmss(r.elapsed) : ''}</div>
+          ${firstBad ? `<a class="btn btn-p" href="#/시험/${e(id)}/답안지/${firstBad.no}" id="exBad">틀린 문항만 해설</a>` : ''}
+          <a class="btn ${firstBad ? 'btn-s' : 'btn-p'}" href="#/시험/${e(id)}/답안지/${r.items[0].no}" id="exAll">1번부터 해설</a>
+          <a class="btn btn-s" href="#/시험">‹ 시험 목록</a>
+          <details><summary>종이에 푼 학생용 채점표(○✕)</summary>${omrHTML(r, id)}</details></aside></div></div>`;
     document.getElementById('exAll').onclick = () => setWrongOnly(false);
+    v().querySelectorAll('.exli').forEach(a => a.addEventListener('click', () => setWrongOnly(false)));
     const b = document.getElementById('exBad'); if (b) b.onclick = () => setWrongOnly(true);
+    r.items.forEach(q => window.scSync.stats(q.id).then(s => {
+      const el = v().querySelector(`[data-rate="${CSS.escape(q.id)}"]`);
+      if (el && s && s.rate != null) el.textContent = s.rate + '%';
+    }).catch(() => {}));
   }
 
   async function reviewItem(id, no) {
@@ -220,36 +258,28 @@
     const U = window.scUI;
     window.scExamQ = q.id; window.scExamSrc = q.source;
     document.body.classList.add('done');
-    window.scExamSheet = () => U.panelOpen('답안지', `<div class="sub">${e(r.name)} · ${r.score} / ${r.total}점</div>` + omrHTML(r, id, q.no));
+    window.scExamSheet = () => U.panelOpen('답안지', `<div class="sub">${e(r.name)} · ${r.score}점</div>` + omrHTML(r, id, q.no));
+    // 문제 화면과 같은 부품(app.js toolsHTML · resultHTML · statInner · solHTML · tailHTML · wireItem — 결정 D-487).
+    // 시험에서 온 때만 위 위치 줄 · 아래 「틀린 문항만 넘기기」가 다르다
+    const times = U.loadAttempts().filter(a => a['문항'] === q.id).length + 1;
     v().innerHTML = `<div class="bar1"><div class="excrumb"><a href="#/시험">시험</a> › <a href="#/시험/${e(id)}/답안지">${e(r.name)}</a> › <b>${q.no}번</b></div>
-        <div class="nav"><a class="ic" ${prev ? `href="${href(prev)}"` : 'style="color:var(--line)"'}>‹</a><span>${W ? '틀린 문항만' : `${i + 1} / ${seq.length}`}</span>
+        <div class="nav"><a class="btn btn-s" href="#/시험/${e(id)}/답안지">결과</a><a class="ic" ${prev ? `href="${href(prev)}"` : 'style="color:var(--line)"'}>‹</a><span>${W ? '틀린 문항만' : `${i + 1} / ${seq.length}`}</span>
           <a class="ic" ${next ? `href="${href(next)}"` : 'style="color:var(--line)"'}>›</a></div></div>
-      <div class="exbig ${q.ok ? 'ok' : 'bad'}"><span class="mk">${q.ok ? '○' : '✕'}</span><span>${q.ok ? '맞음' : '틀림'}</span>${q.picked ? '' : '<span class="my">답을 쓰지 않았습니다</span>'}</div>
       <div class="bar2"><span class="exqn">${q.no}번</span><span class="sub">${e(q.source)}${q.points ? ` · ${q.points}점` : ''}</span>
-        <span style="flex:1"></span>
-        <span class="tools">
-          <button class="ic ${U.loadSet('sc.bm').has(q.id) ? 'on' : ''}" id="bmBtn" title="북마크(나중에 다시 볼 문제)">${U.ICON.bm}</button>
-          <button class="ic ${U.loadSet('sc.unsure').has(q.id) ? 'on' : ''}" id="unsureBtn" title="잘 모르는 문제로 표시">${U.ICON.q}</button>
-          <button class="ic" id="memoBtn" title="암기 메모 · 오답 정리">${U.ICON.memo}</button>
-          <button class="ic" id="sheetBtn" title="내 답안지">${U.ICON.check}</button>
-          <button class="ic" id="commBtn" title="커뮤니티(게시글)">${U.ICON.comm}</button>
-          <button class="ic" id="aiBtn" title="AI에게 물어보기">${U.ICON.ai}</button>
-        </span></div>
+        <span style="flex:1"></span>${U.toolsHTML(q.id)}</div>
       <div class="stem x">${fix(q.stem)}</div>
       <div class="choices">${(q.choices || []).map((t, k) => `<div class="ch ${k + 1 === q.answer ? 'correct' : ''} ${k + 1 === q.picked && !q.ok ? 'mywrong' : ''} ${k + 1 === q.picked ? 'sel' : ''}"><span class="num">${k + 1}</span><span class="txt">${e(t)}</span></div>`).join('')}</div>
-      ${U.solHTML({ explain: q.explain ? fix(q.explain) : '', bogi: q.bogi ? fix(q.bogi) : '', more: q.more ? fix(q.more) : '', rel: U.relHTML(q.id) })}
-      <div class="check" style="justify-content:space-between;margin-top:32px">
-        ${prev ? `<a class="btn btn-s" href="${href(prev)}">‹ 이전 문항</a>` : '<span></span>'}
-        <label class="exnote" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="exWO" ${W ? 'checked' : ''}>틀린 문항만 넘기기</label>
-        ${next ? `<a class="btn btn-s" href="${href(next)}">다음 문항 ›</a>` : '<span></span>'}</div>`;
-    const tog = (k, btn) => { const s = U.loadSet(k); s.has(q.id) ? s.delete(q.id) : s.add(q.id); U.saveSet(k, s); btn.classList.toggle('on', s.has(q.id)); };
-    document.getElementById('bmBtn').onclick = ev => tog('sc.bm', ev.currentTarget);
-    document.getElementById('unsureBtn').onclick = ev => tog('sc.unsure', ev.currentTarget);
-    U.wireJump(v());
-    document.getElementById('sheetBtn').onclick = window.scExamSheet;
-    document.getElementById('memoBtn').onclick = () => U.openMemo(q.id);
-    document.getElementById('commBtn').onclick = () => U.openComm(q.id);
-    document.getElementById('aiBtn').onclick = () => U.openAI(q.id);
+      <div class="after">
+        ${U.resultHTML(q.ok, q.picked ? '' : ' <span class="sub">답을 쓰지 않았습니다</span>')}
+        <div class="stat" id="stat">${U.statInner(q.id, q.seconds, times)}</div>
+        ${U.solHTML({ explain: q.explain ? fix(q.explain) : '', bogi: q.bogi ? fix(q.bogi) : '', more: q.more ? fix(q.more) : '', rel: U.relHTML(q.id) })}
+        ${U.tailHTML(q.id)}
+        <div class="check" style="justify-content:space-between;margin-top:32px">
+          ${prev ? `<a class="btn btn-s" href="${href(prev)}">‹ 이전 문항</a>` : '<span></span>'}
+          <label class="exnote" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="exWO" ${W ? 'checked' : ''}>틀린 문항만 넘기기</label>
+          ${next ? `<a class="btn btn-s" href="${href(next)}">다음 문항 ›</a>` : `<a class="btn btn-s" href="#/시험/${e(id)}/답안지">결과로</a>`}</div></div>`;
+    U.wireItem(q.id, window.scExamSheet);
+    U.fillStats(q.id);
     document.getElementById('exWO').onchange = ev => { setWrongOnly(ev.target.checked); reviewItem(id, no); };
   }
 

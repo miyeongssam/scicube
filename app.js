@@ -117,6 +117,53 @@ function wireJump(root){
 }
 function relHTML(id){ const q = byId[id]; return q ? q['관련'].map(r => `<a class="lk" href="#/개념/${esc(r['카드'])}">${esc(r['말'])}</a>`).join(' · ') : ''; }
 
+// 문항 한 장 화면의 부품 — 문제 화면 · 시험 해설(exam.js)이 똑같이 쓴다. 한 곳만 고치면 두 화면이 함께 바뀐다
+// (원장 11/03 「약속했는데 평가 1회로 풀면 왜 또 다 달라지나」 — 결정 D-487)
+function toolsHTML(id){
+  return `<span class="tools">
+    <button class="ic ${loadSet('sc.bm').has(id) ? 'on' : ''}" id="bmBtn" title="북마크(나중에 다시 볼 문제)">${ICON.bm}</button>
+    <button class="ic ${loadSet('sc.unsure').has(id) ? 'on' : ''}" id="unsureBtn" title="잘 모르는 문제로 표시">${ICON.q}</button>
+    <button class="ic" id="memoBtn" title="암기 메모 · 오답 정리">${ICON.memo}</button>
+    <button class="ic" id="sheetBtn" title="답안지">${ICON.check}</button>
+    <button class="ic" id="commBtn" title="커뮤니티(게시글)">${ICON.comm}</button>
+    <button class="ic" id="aiBtn" title="AI에게 물어보기">${ICON.ai}</button></span>`;
+}
+function resultHTML(ok, extra){ return `<div class="result ${ok ? 'ok' : 'bad'}" id="result">${ok ? '정답입니다.' : '오답입니다.'}${extra || ''}</div>`; }
+// 통계 상자: 정답률 · 누적 풀이 · 평균 / 나의 풀이 시간 · 내가 푼 횟수 (서버 question_stats)
+function statInner(id, secs, times){
+  return `<div>정답률 <b id="stR">—</b></div><div>누적 풀이 <b id="stN">—</b></div><div>평균 풀이 시간 <b id="stS">—</b> / 나의 풀이 시간 <b>${secs != null ? secs + '초' : '—'}</b></div>`
+    + `<div class="sub" style="flex-basis:100%">내가 이 문제를 푼 횟수 ${times}번</div>`;
+}
+function fillStats(id){
+  setTimeout(() => window.scSync.stats(id).then(s => { if (!s || !document.getElementById('stR')) return;
+    document.getElementById('stR').textContent = s.rate == null ? '—' : s.rate + '%'; document.getElementById('stN').textContent = s.count + '번'; document.getElementById('stS').textContent = s.seconds == null ? '—' : s.seconds + '초'; }), 300);
+}
+function tailHTML(id){
+  const q = byId[id], refs = q && q['참고'] || [];
+  return `${refs.length ? `<h2>참고 자료</h2><ul class="refs">${refs.map(r => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
+    <div class="qa-head"><div><h2 style="margin:0">커뮤니티 Q&A</h2><div class="sub">위 문제와 관련된 게시글이에요.</div></div>
+      <button class="btn btn-p" id="askComm">게시글 작성하기</button></div>
+    <div class="ask" id="qaBox"></div>`;
+}
+function wireItem(id, sheet){
+  const tog = (k, btn) => { const s = loadSet(k); s.has(id) ? s.delete(id) : s.add(id); saveSet(k, s); btn.classList.toggle('on', s.has(id)); };
+  document.getElementById('bmBtn').onclick = e => tog('sc.bm', e.currentTarget);
+  document.getElementById('unsureBtn').onclick = e => tog('sc.unsure', e.currentTarget);
+  document.getElementById('memoBtn').onclick = () => openMemo(id);
+  document.getElementById('sheetBtn').onclick = sheet;
+  document.getElementById('aiBtn').onclick = () => openAI(id);
+  document.getElementById('commBtn').onclick = () => openComm(id);
+  document.getElementById('askComm').onclick = () => openComm(id);
+  const posts = loadPosts(id);
+  document.getElementById('qaBox').innerHTML = posts.length
+    ? posts.map(p => `<div class="post"><div class="sub">${esc(p['날짜'].slice(0, 10))}</div>${esc(p['글'])}</div>`).join('')
+    : `<div style="text-align:center;width:100%">이해가 안 되거나 궁금한 점이 있다면<br><a class="qlk" href="javascript:void 0" id="askComm2">커뮤니티에 질문</a>해 보세요! · <a class="qlk" href="javascript:void 0" id="askAI2">AI에게 질문</a></div>`;
+  const c2 = document.getElementById('askComm2'), a2 = document.getElementById('askAI2');
+  if (c2) c2.onclick = () => openComm(id);
+  if (a2) a2.onclick = () => openAI(id);
+  wireJump(view);
+}
+
 function problem(id){
   const q = byId[id]; if (!q) return home();
   const i = Q.indexOf(q), prev = Q[i - 1], next = Q[i + 1];
@@ -132,14 +179,7 @@ function problem(id){
         <a class="ic" ${next ? `href="#/문항/${next.id}"` : 'style="color:var(--line)"'}>›</a></div></div>
     <div class="bar2"><span class="qno">${esc(q['출처'])}</span><span class="badge">${esc(q['자료유형'])}</span>${q['배점'] ? `<span class="sub">${esc(q['배점'])}점</span>` : ''}
       <span style="flex:1"></span>
-      <span class="tools">
-        <button class="ic ${loadSet('sc.bm').has(id) ? 'on' : ''}" id="bmBtn" title="북마크(나중에 다시 볼 문제)">${ICON.bm}</button>
-        <button class="ic ${loadSet('sc.unsure').has(id) ? 'on' : ''}" id="unsureBtn" title="잘 모르는 문제로 표시">${ICON.q}</button>
-        <button class="ic" id="memoBtn" title="암기 메모">${ICON.memo}</button>
-        <button class="ic" id="sheetBtn" title="답안지">${ICON.check}</button>
-        <button class="ic" id="commBtn" title="커뮤니티(게시글)">${ICON.comm}</button>
-        <button class="ic" id="aiBtn" title="AI에게 물어보기">${ICON.ai}</button>
-      </span></div>
+      ${toolsHTML(id)}</div>
     <div class="stem x">${q['문제']}</div>
     <div class="choices">${q['선지'].map((c, k) => `<div class="ch" role="button" data-k="${k + 1}"><button class="oxb cx"></button><span class="num">${k + 1}</span><span class="txt">${esc(c)}</span></div>`).join('')}</div>
     <div class="check" id="check"></div>
@@ -147,10 +187,7 @@ function problem(id){
       <div class="result" id="result"></div>
       <div class="stat" id="stat"></div>
       ${solHTML({explain: q['해설'], bogi: q['보기해설'], more: q['더'], rel})}
-      <h2>참고 자료</h2><ul class="refs">${(q['참고'] || []).map(r => `<li>${esc(r)}</li>`).join('')}</ul>
-      <div class="qa-head"><div><h2 style="margin:0">커뮤니티 Q&A</h2><div class="sub">위 문제와 관련된 게시글이에요.</div></div>
-        <button class="btn btn-p" id="askComm">게시글 작성하기</button></div>
-      <div class="ask" id="qaBox"></div>
+      ${tailHTML(id)}
       <div class="check" style="justify-content:space-between;margin-top:32px">
         ${prev ? `<a class="btn btn-s" href="#/문항/${prev.id}">‹ 이전 문제</a>` : '<span></span>'}
         ${next ? `<a class="btn btn-s" href="#/문항/${next.id}">다음 문제 ›</a>` : `<a class="btn btn-s" href="#/">목록으로</a>`}</div>
@@ -197,10 +234,8 @@ function problem(id){
       document.getElementById('result').innerHTML = (ok ? '정답입니다.' : '오답입니다.') +
         (ok && outCorrect ? '<span class="tag" title="처음에 오답이라고 지웠던 선지가 정답이었습니다">지웠던 선지 → 정답</span>' : '');
       const mine = loadAttempts().filter(a => a['문항'] === id), last = loadRes()[id] || {};
-      document.getElementById('stat').innerHTML = `<div>정답률 <b id="stR">—</b></div><div>누적 풀이 <b id="stN">—</b></div><div>평균 풀이 시간 <b id="stS">—</b> / 나의 풀이 시간 <b>${last.secs != null ? last.secs + '초' : '—'}</b></div>`
-        + `<div class="sub" style="flex-basis:100%">내가 이 문제를 푼 횟수 ${mine.length}번</div>`;
-      setTimeout(() => window.scSync.stats(id).then(s => { if (!s || !document.getElementById('stR')) return;
-        document.getElementById('stR').textContent = s.rate == null ? '—' : s.rate + '%'; document.getElementById('stN').textContent = s.count + '번'; document.getElementById('stS').textContent = s.seconds == null ? '—' : s.seconds + '초'; }), 800);
+      document.getElementById('stat').innerHTML = statInner(id, last.secs, mine.length);
+      fillStats(id);
       check.innerHTML = `<button class="btn btn-s" id="again">다시 풀기</button>`;
       document.getElementById('again').onclick = () => { document.body.classList.remove('done'); sel = 0; Object.keys(out).forEach(k => delete out[k]); Object.keys(bogi).forEach(b => delete bogi[b]); outCorrect = false; clearRes(id); paint(); };
     } else {
@@ -219,26 +254,7 @@ function problem(id){
     savePick(id, {sel, bogi, out});   // 고른 답은 바로 답안지에 보인다(정답 확인 전에도)
     paint();
   });
-  document.getElementById('memoBtn').onclick = () => openMemo(id);
-  document.getElementById('sheetBtn').onclick = () => openSheet();
-  document.getElementById('aiBtn').onclick = () => openAI(id);
-  document.getElementById('askComm').onclick = () => openComm(id);
-  document.getElementById('commBtn').onclick = () => openComm(id);
-  document.getElementById('bmBtn').onclick = e => {
-    const s = loadSet('sc.bm'); s.has(id) ? s.delete(id) : s.add(id); saveSet('sc.bm', s);
-    e.currentTarget.classList.toggle('on', s.has(id));
-  };
-  const posts = loadPosts(id);
-  document.getElementById('qaBox').innerHTML = posts.length
-    ? posts.map(p => `<div class="post"><div class="sub">${esc(p['날짜'].slice(0, 10))}</div>${esc(p['글'])}</div>`).join('')
-    : `<div style="text-align:center;width:100%">이해가 안 되거나 궁금한 점이 있다면<br><a class="qlk" href="javascript:void 0" id="askComm2">커뮤니티에 질문</a>해 보세요! · <a class="qlk" href="javascript:void 0" id="askAI2">AI에게 질문</a></div>`;
-  const c2 = document.getElementById('askComm2'), a2 = document.getElementById('askAI2');
-  if (c2) c2.onclick = () => openComm(id);
-  if (a2) a2.onclick = () => openAI(id);
-  document.getElementById('unsureBtn').onclick = e => {
-    const s = loadSet('sc.unsure'); s.has(id) ? s.delete(id) : s.add(id); saveSet('sc.unsure', s);
-    e.currentTarget.classList.toggle('on', s.has(id));
-  };
+  wireItem(id, () => openSheet());
   paint();
 }
 
@@ -443,6 +459,7 @@ function route(){
   window.scrollTo(0, 0);
 }
 window.scUI = { ICON, loadSet, saveSet, openMemo, openComm, openAI, solHTML, wireJump, relHTML,
+  toolsHTML, resultHTML, statInner, fillStats, tailHTML, wireItem, loadAttempts, esc, UNAME,
   panelOpen: (tab, html) => { panel.innerHTML = panelHead(tab) + html; wirePanel(); } };
 window.addEventListener('hashchange', route);
 route();

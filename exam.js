@@ -22,8 +22,7 @@
 .exq .ch.ans{border-color:var(--ok);background:rgba(34,160,107,.08)}
 .exq .ch.wrong{border-color:var(--danger);background:rgba(229,72,77,.08)}
 .exq .ch.sel{background:rgba(47,107,255,.08)}
-.exst{display:inline-block;margin-left:8px;font-size:13px;font-weight:600;padding:2px 8px;border-radius:999px;vertical-align:middle;background:var(--soft);color:var(--sub)}
-.exst.on{background:var(--primary);color:#fff}
+.exqn{font-size:24px;font-weight:700;margin-right:4px}
 .exmask{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:grid;place-items:center;padding:16px}
 .exbox{background:var(--bg);border-radius:12px;padding:24px;width:100%;max-width:380px;box-shadow:0 10px 30px rgba(0,0,0,.2)}
 .exbox h3{margin:0 0 12px;font-size:19px}
@@ -92,18 +91,17 @@
     v().innerHTML = `<h1>${e(x.name)}</h1>
       <div class="exhead"><span class="extime" id="exT"></span><span class="exnote" id="exC"></span><span style="flex:1"></span><button class="btn btn-p" id="exGo">제출하기</button>
         <div class="exomr" id="exO">${x.items.map(q => `<a href="javascript:void 0" data-j="${q.no}"></a>`).join('')}</div></div>
-      ${x.items.map(q => `<div class="exq" id="exq${q.no}"><div class="exno">${q.no}번${q.points ? ` <span class="exnote">${q.points}점</span>` : ''}<span class="exst" id="exs${q.no}"></span></div>
+      ${x.items.map(q => `<div class="exq" id="exq${q.no}"><div class="exno">${q.no}번${q.points ? ` <span class="exnote">${q.points}점</span>` : ''}</div>
         <div class="stem x">${fix(q.stem)}</div>
         <div class="choices">${(q.choices || []).map((c, k) => `<div class="ch" role="button" data-q="${e(q.id)}" data-k="${k + 1}"><span class="num">${k + 1}</span><span class="txt">${e(c)}</span></div>`).join('')}</div></div>`).join('')}
       <div style="margin:24px 0"><button class="btn btn-p" id="exGo2">제출하기</button></div>`;
-    // 고른 선지는 번호 동그라미를 채우고(문제 화면과 같은 모양), 문항 머리에 「답함 ③」 / 「안 품」 (원장 검토 A1 · A2)
+    // 고른 선지는 번호 동그라미를 채운다(문제 화면과 같은 모양, 원장 검토 A1). 「답함 · 안 품」 글씨는 2차 검토에서 뺐다 — 선지 색으로 충분
     const paint = () => {
       let n = 0;
       x.items.forEach(q => {
-        const a = ans[q.id], o = document.querySelector(`#exO [data-j="${q.no}"]`), s = document.getElementById('exs' + q.no);
+        const a = ans[q.id], o = document.querySelector(`#exO [data-j="${q.no}"]`);
         if (a) n++;
         o.textContent = q.no; o.className = a ? 'on' : '';
-        s.textContent = a ? `답함 ${NUM[a]}` : '안 품'; s.className = 'exst' + (a ? ' on' : '');
       });
       document.getElementById('exC').textContent = `답한 문항 ${n} / ${x.items.length}`;
       document.querySelectorAll('.exq .ch').forEach(c => c.classList.toggle('sel', ans[c.dataset.q] === +c.dataset.k));
@@ -217,9 +215,8 @@
         <div class="nav"><a class="btn btn-s" href="#/시험/${e(id)}/답안지">요약</a>
           <a class="ic" ${prev ? `href="${href(prev)}"` : 'style="color:var(--line)"'}>‹</a><span>${q.no}번${W ? ' · 틀린 것만' : ` / ${r.items.length}`}</span>
           <a class="ic" ${next ? `href="${href(next)}"` : 'style="color:var(--line)"'}>›</a></div></div>
-      <div class="exbig ${q.ok ? 'ok' : 'bad'}"><span class="mk">${q.ok ? '○' : '✕'}</span><span>${q.ok ? '맞음' : '틀림'}</span>
-        <span class="my">내 답 ${q.picked ? NUM[q.picked] : '안 씀'} · 정답 ${NUM[q.answer] || ''}</span></div>
-      <div class="bar2"><span class="qno">${q.no}번 · ${e(q.source)}</span>${q.points ? `<span class="sub">${q.points}점</span>` : ''}
+      <div class="exbig ${q.ok ? 'ok' : 'bad'}"><span class="mk">${q.ok ? '○' : '✕'}</span><span>${q.ok ? '맞음' : '틀림'}</span>${q.picked ? '' : '<span class="my">답을 쓰지 않았습니다</span>'}</div>
+      <div class="bar2"><span class="exqn">${q.no}번</span><span class="sub">${e(q.source)}${q.points ? ` · ${q.points}점` : ''}</span>
         <span style="flex:1"></span>
         <span class="tools">
           <button class="ic ${U.loadSet('sc.bm').has(q.id) ? 'on' : ''}" id="bmBtn" title="북마크(나중에 다시 볼 문제)">${U.ICON.bm}</button>

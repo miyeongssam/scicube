@@ -99,6 +99,24 @@ function home(tab){
 
 function UNAME(u){ return ({'자연선택과진화': '자연선택과 진화', '생물다양성과보전': '생물다양성과 보전'})[u] || u; }
 
+// 해설 묶음(문제 화면 · 시험 답안지 함께): 바로 가기 단추 → 해설 → 보기 해설 → 더 알아보기(접어 둠) → 관련 개념 (원장 11/03 3차 검토)
+function solHTML(s){
+  const jump = [['sx-ex', '해설'], s.bogi && ['sx-bogi', '보기 해설 ㄱㄴㄷ'], s.more && ['sx-more', '더 알아보기'], s.rel && ['sx-rel', '관련 개념']].filter(Boolean);
+  return `<div class="jump">${jump.map(j => `<a href="javascript:void 0" data-jump="${j[0]}">${j[1]}</a>`).join('')}</div>
+    <h2 class="sech" id="sx-ex">해설</h2>${s.explain ? `<div class="x">${s.explain}</div>` : '<p class="sub">이 문항은 아직 해설이 없습니다.</p>'}
+    ${s.bogi ? `<h2 class="sech bogi" id="sx-bogi">보기 해설</h2><div class="x">${s.bogi}</div>` : ''}
+    ${s.more ? `<details class="morebox" id="sx-more"><summary><h2 class="sech mo">더 알아보기<span class="tog"></span></h2></summary><div class="x">${s.more}</div></details>` : ''}
+    ${s.rel ? `<h2 class="sech mo" id="sx-rel">관련 개념</h2><div class="rel">${s.rel}</div>` : ''}`;
+}
+function wireJump(root){
+  root.querySelectorAll('[data-jump]').forEach(a => a.onclick = () => {
+    const t = document.getElementById(a.dataset.jump); if (!t) return;
+    if (t.tagName === 'DETAILS') t.open = true;
+    t.scrollIntoView({behavior: 'smooth', block: 'start'});
+  });
+}
+function relHTML(id){ const q = byId[id]; return q ? q['관련'].map(r => `<a class="lk" href="#/개념/${esc(r['카드'])}">${esc(r['말'])}</a>`).join(' · ') : ''; }
+
 function problem(id){
   const q = byId[id]; if (!q) return home();
   const i = Q.indexOf(q), prev = Q[i - 1], next = Q[i + 1];
@@ -128,10 +146,7 @@ function problem(id){
     <div class="after">
       <div class="result" id="result"></div>
       <div class="stat" id="stat"></div>
-      <h2>해설</h2><div class="x">${q['해설']}</div>
-      ${q['더'] ? `<div class="more"><h2>더 알아보기</h2><div class="x">${q['더']}</div></div>` : ''}
-      ${q['보기해설'] ? `<h2>보기 해설</h2><div class="x">${q['보기해설']}</div>` : ''}
-      <h2>관련 개념</h2><div class="rel">${rel}</div>
+      ${solHTML({explain: q['해설'], bogi: q['보기해설'], more: q['더'], rel})}
       <h2>참고 자료</h2><ul class="refs">${(q['참고'] || []).map(r => `<li>${esc(r)}</li>`).join('')}</ul>
       <div class="qa-head"><div><h2 style="margin:0">커뮤니티 Q&A</h2><div class="sub">위 문제와 관련된 게시글이에요.</div></div>
         <button class="btn btn-p" id="askComm">게시글 작성하기</button></div>
@@ -140,6 +155,7 @@ function problem(id){
         ${prev ? `<a class="btn btn-s" href="#/문항/${prev.id}">‹ 이전 문제</a>` : '<span></span>'}
         ${next ? `<a class="btn btn-s" href="#/문항/${next.id}">다음 문제 ›</a>` : `<a class="btn btn-s" href="#/">목록으로</a>`}</div>
     </div>`;
+  wireJump(view);
   const chs = [...view.querySelectorAll('.ch')], check = document.getElementById('check');
   const out = {};   // ①~⑤만 있는 문제: 선지별 ○ / ✕ 표시 {3: 'x'}
   const src = saved || loadPick()[id] || {};
@@ -240,13 +256,13 @@ function onExamItem(){ return /^#\/시험\/[^/]+\/답안지\/\d+$/.test(decodeUR
 function curQ(){ const h = decodeURIComponent(location.hash); return h.startsWith('#/문항/') ? h.slice('#/문항/'.length) : onExamItem() ? window.scExamQ || null : null; }
 function srcOf(id){ return byId[id] ? byId[id]['출처'] : (window.scExamSrc || ''); }
 function panelHead(tab){
-  const tabs = [['개념', '개념 카드', stack.length > 0], ['메모', '암기 메모', !!curQ()], ['답안지', '답안지', !onExamItem()], ['커뮤니티', '커뮤니티', !!curQ()], ['AI', 'AI 질문', !!curQ()]];
+  const tabs = [['개념', '개념 카드', stack.length > 0], ['메모', '암기 메모', !!curQ()], ['답안지', onExamItem() ? '내 답안지' : '답안지', true], ['커뮤니티', '커뮤니티', !!curQ()], ['AI', 'AI 질문', !!curQ()]];
   return `<div class="ph"><div class="ptabs">${tabs.filter(t => t[2]).map(t => `<button data-t="${t[0]}" class="${tab === t[0] ? 'on' : ''}">${t[1]}</button>`).join('')}</div>
     <span class="sp"></span><button class="ic" id="px" aria-label="닫기">✕</button></div>`;
 }
 function wirePanel(){
   document.getElementById('px').onclick = closePanel;
-  const go = {'메모': () => openMemo(curQ()), '답안지': () => openSheet(), '커뮤니티': () => openComm(curQ()), 'AI': () => openAI(curQ()), '개념': () => showConcept()};
+  const go = {'메모': () => openMemo(curQ()), '답안지': () => onExamItem() && window.scExamSheet ? window.scExamSheet() : openSheet(), '커뮤니티': () => openComm(curQ()), 'AI': () => openAI(curQ()), '개념': () => showConcept()};
   panel.querySelectorAll('.ptabs button').forEach(b => b.onclick = () => go[b.dataset.t]());
   panel.scrollTop = 0;
   document.body.classList.add('panel-open');
@@ -418,6 +434,7 @@ function route(){
   else { document.body.classList.remove('done'); home(); }
   window.scrollTo(0, 0);
 }
-window.scUI = { ICON, loadSet, saveSet, openMemo, openComm, openAI };
+window.scUI = { ICON, loadSet, saveSet, openMemo, openComm, openAI, solHTML, wireJump, relHTML,
+  panelOpen: (tab, html) => { panel.innerHTML = panelHead(tab) + html; wirePanel(); } };
 window.addEventListener('hashchange', route);
 route();

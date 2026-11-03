@@ -178,6 +178,14 @@
     return cache;
   }
 
+  // 내 답안지(OMR 꼴): 번호 · ○✕ · ①~⑤ (파랑 채움 = 맞힌 답, 빨강 = 틀리게 고른 답, 파랑 테두리 = 정답). 줄을 누르면 그 문항 해설
+  const omrHTML = (r, id, cur) => `<div class="sheet">${r.items.map(x => {
+      const n = (x.choices || []).length || 5;
+      const dots = Array.from({ length: n }, (_, j) => j + 1).map(k => `<span class="dot ${k === x.picked ? (x.ok ? 'ok' : 'bad') : k === x.answer ? 'ans' : ''}">${k}</span>`).join('');
+      return `<a class="srow ${String(x.no) === String(cur) ? 'cur' : ''}" href="#/시험/${e(id)}/답안지/${x.no}"><span class="sn">${x.no}</span><span class="sr ${x.ok ? 'o' : 'x'}">${x.ok ? '○' : '✕'}</span>${dots}</a>`;
+    }).join('')}</div>
+    <div class="legend"><span><span class="dot ok">3</span> 맞힌 답</span><span><span class="dot bad">3</span> 틀리게 고른 답</span><span><span class="dot ans">3</span> 정답</span></div>`;
+
   async function review(id) {
     stopClock();
     v().innerHTML = '<p class="exnote">답안지를 불러오는 중입니다…</p>';
@@ -189,12 +197,13 @@
       return;
     }
     const firstBad = r.items.find(q => !q.ok);
-    v().innerHTML = `<h1>${e(r.name)} 답안지</h1><div class="exscore">${r.score} / ${r.total}점</div><div class="sub">맞힌 문항 ${r.correct} / ${r.count} · 번호를 누르면 그 문항의 해설이 열립니다</div>
-      <div class="exgrid">${r.items.map(q => `<a href="#/시험/${e(id)}/답안지/${q.no}" class="${q.ok ? 'ok' : 'bad'}">${q.no}<small>${q.ok ? '○' : '✕'}</small></a>`).join('')}</div>
+    v().innerHTML = `<div class="omrpage"><div class="excrumb"><a href="#/시험">시험</a> › <b>${e(r.name)}</b></div>
+      <div class="exscore">${r.score} / ${r.total}점</div><div class="sub">맞힌 문항 ${r.correct} / ${r.count} · 줄을 누르면 그 문항의 해설이 열립니다</div>
+      ${omrHTML(r, id)}
       <div class="check" style="justify-content:flex-start;gap:8px;flex-wrap:wrap">
         <a class="btn btn-p" href="#/시험/${e(id)}/답안지/${r.items[0].no}" id="exAll">1번부터 해설 보기</a>
         ${firstBad ? `<a class="btn btn-s" href="#/시험/${e(id)}/답안지/${firstBad.no}" id="exBad">틀린 문항만 해설 보기</a>` : ''}
-        <a class="btn btn-s" href="#/시험">시험 목록</a></div>`;
+        <a class="btn btn-s" href="#/시험">‹ 목록으로</a></div></div>`;
     document.getElementById('exAll').onclick = () => setWrongOnly(false);
     const b = document.getElementById('exBad'); if (b) b.onclick = () => setWrongOnly(true);
   }
@@ -211,9 +220,9 @@
     const U = window.scUI;
     window.scExamQ = q.id; window.scExamSrc = q.source;
     document.body.classList.add('done');
-    v().innerHTML = `<div class="bar1"><h1>${e(r.name)}</h1>
-        <div class="nav"><a class="btn btn-s" href="#/시험/${e(id)}/답안지">요약</a>
-          <a class="ic" ${prev ? `href="${href(prev)}"` : 'style="color:var(--line)"'}>‹</a><span>${q.no}번${W ? ' · 틀린 것만' : ` / ${r.items.length}`}</span>
+    window.scExamSheet = () => U.panelOpen('답안지', `<div class="sub">${e(r.name)} · ${r.score} / ${r.total}점</div>` + omrHTML(r, id, q.no));
+    v().innerHTML = `<div class="bar1"><div class="excrumb"><a href="#/시험">시험</a> › <a href="#/시험/${e(id)}/답안지">${e(r.name)}</a> › <b>${q.no}번</b></div>
+        <div class="nav"><a class="ic" ${prev ? `href="${href(prev)}"` : 'style="color:var(--line)"'}>‹</a><span>${W ? '틀린 문항만' : `${i + 1} / ${seq.length}`}</span>
           <a class="ic" ${next ? `href="${href(next)}"` : 'style="color:var(--line)"'}>›</a></div></div>
       <div class="exbig ${q.ok ? 'ok' : 'bad'}"><span class="mk">${q.ok ? '○' : '✕'}</span><span>${q.ok ? '맞음' : '틀림'}</span>${q.picked ? '' : '<span class="my">답을 쓰지 않았습니다</span>'}</div>
       <div class="bar2"><span class="exqn">${q.no}번</span><span class="sub">${e(q.source)}${q.points ? ` · ${q.points}점` : ''}</span>
@@ -222,23 +231,22 @@
           <button class="ic ${U.loadSet('sc.bm').has(q.id) ? 'on' : ''}" id="bmBtn" title="북마크(나중에 다시 볼 문제)">${U.ICON.bm}</button>
           <button class="ic ${U.loadSet('sc.unsure').has(q.id) ? 'on' : ''}" id="unsureBtn" title="잘 모르는 문제로 표시">${U.ICON.q}</button>
           <button class="ic" id="memoBtn" title="암기 메모 · 오답 정리">${U.ICON.memo}</button>
-          <a class="ic" href="#/시험/${e(id)}/답안지" title="답안지 요약">${U.ICON.check}</a>
+          <button class="ic" id="sheetBtn" title="내 답안지">${U.ICON.check}</button>
           <button class="ic" id="commBtn" title="커뮤니티(게시글)">${U.ICON.comm}</button>
           <button class="ic" id="aiBtn" title="AI에게 물어보기">${U.ICON.ai}</button>
         </span></div>
       <div class="stem x">${fix(q.stem)}</div>
       <div class="choices">${(q.choices || []).map((t, k) => `<div class="ch ${k + 1 === q.answer ? 'correct' : ''} ${k + 1 === q.picked && !q.ok ? 'mywrong' : ''} ${k + 1 === q.picked ? 'sel' : ''}"><span class="num">${k + 1}</span><span class="txt">${e(t)}</span></div>`).join('')}</div>
-      <div class="exbody">
-        ${q.explain ? `<h2>해설</h2><div class="x">${fix(q.explain)}</div>` : '<p class="exnote">이 문항은 아직 해설이 없습니다.</p>'}
-        ${q.more ? `<div class="more"><h2>더 알아보기</h2><div class="x">${fix(q.more)}</div></div>` : ''}
-        ${q.bogi ? `<h2>보기 해설</h2><div class="x">${fix(q.bogi)}</div>` : ''}</div>
+      ${U.solHTML({ explain: q.explain ? fix(q.explain) : '', bogi: q.bogi ? fix(q.bogi) : '', more: q.more ? fix(q.more) : '', rel: U.relHTML(q.id) })}
       <div class="check" style="justify-content:space-between;margin-top:32px">
         ${prev ? `<a class="btn btn-s" href="${href(prev)}">‹ 이전 문항</a>` : '<span></span>'}
         <label class="exnote" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="exWO" ${W ? 'checked' : ''}>틀린 문항만 넘기기</label>
-        ${next ? `<a class="btn btn-s" href="${href(next)}">다음 문항 ›</a>` : `<a class="btn btn-s" href="#/시험/${e(id)}/답안지">요약으로</a>`}</div>`;
+        ${next ? `<a class="btn btn-s" href="${href(next)}">다음 문항 ›</a>` : `<a class="btn btn-s" href="#/시험/${e(id)}/답안지">답안지로</a>`}</div>`;
     const tog = (k, btn) => { const s = U.loadSet(k); s.has(q.id) ? s.delete(q.id) : s.add(q.id); U.saveSet(k, s); btn.classList.toggle('on', s.has(q.id)); };
     document.getElementById('bmBtn').onclick = ev => tog('sc.bm', ev.currentTarget);
     document.getElementById('unsureBtn').onclick = ev => tog('sc.unsure', ev.currentTarget);
+    U.wireJump(v());
+    document.getElementById('sheetBtn').onclick = window.scExamSheet;
     document.getElementById('memoBtn').onclick = () => U.openMemo(q.id);
     document.getElementById('commBtn').onclick = () => U.openComm(q.id);
     document.getElementById('aiBtn').onclick = () => U.openAI(q.id);

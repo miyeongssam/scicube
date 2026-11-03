@@ -184,7 +184,7 @@
       const dots = Array.from({ length: n }, (_, j) => j + 1).map(k => `<span class="dot ${k === x.picked ? (x.ok ? 'ok' : 'bad') : k === x.answer ? 'ans' : ''}">${k}</span>`).join('');
       return `<a class="srow ${String(x.no) === String(cur) ? 'cur' : ''}" href="#/시험/${e(id)}/답안지/${x.no}"><span class="sn">${x.no}</span><span class="sr ${x.ok ? 'o' : 'x'}">${x.ok ? '○' : '✕'}</span>${dots}</a>`;
     }).join('')}</div>
-    <div class="legend"><span><span class="dot ok">3</span> 맞힌 답</span><span><span class="dot bad">3</span> 틀리게 고른 답</span><span><span class="dot ans">3</span> 정답</span></div>`;
+    <div class="legend"><span><span class="dot ok"></span> 내가 고른 답(맞음)</span><span><span class="dot bad"></span> 내가 고른 답(틀림)</span><span><span class="dot ans"></span> 정답</span></div>`;
 
   async function review(id) {
     stopClock();
@@ -241,7 +241,7 @@
       <div class="check" style="justify-content:space-between;margin-top:32px">
         ${prev ? `<a class="btn btn-s" href="${href(prev)}">‹ 이전 문항</a>` : '<span></span>'}
         <label class="exnote" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="exWO" ${W ? 'checked' : ''}>틀린 문항만 넘기기</label>
-        ${next ? `<a class="btn btn-s" href="${href(next)}">다음 문항 ›</a>` : `<a class="btn btn-s" href="#/시험/${e(id)}/답안지">답안지로</a>`}</div>`;
+        ${next ? `<a class="btn btn-s" href="${href(next)}">다음 문항 ›</a>` : '<span></span>'}</div>`;
     const tog = (k, btn) => { const s = U.loadSet(k); s.has(q.id) ? s.delete(q.id) : s.add(q.id); U.saveSet(k, s); btn.classList.toggle('on', s.has(q.id)); };
     document.getElementById('bmBtn').onclick = ev => tog('sc.bm', ev.currentTarget);
     document.getElementById('unsureBtn').onclick = ev => tog('sc.unsure', ev.currentTarget);

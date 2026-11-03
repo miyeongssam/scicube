@@ -104,7 +104,7 @@ function solHTML(s){
   const jump = [['sx-ex', '해설'], s.bogi && ['sx-bogi', '보기 해설 ㄱㄴㄷ'], s.more && ['sx-more', '더 알아보기'], s.rel && ['sx-rel', '관련 개념']].filter(Boolean);
   return `<div class="jump">${jump.map(j => `<a href="javascript:void 0" data-jump="${j[0]}">${j[1]}</a>`).join('')}</div>
     <h2 class="sech" id="sx-ex">해설</h2>${s.explain ? `<div class="x">${s.explain}</div>` : '<p class="sub">이 문항은 아직 해설이 없습니다.</p>'}
-    ${s.bogi ? `<h2 class="sech bogi" id="sx-bogi">보기 해설</h2><div class="x">${s.bogi}</div>` : ''}
+    ${s.bogi ? `<h2 class="sech bg" id="sx-bogi">보기 해설</h2><div class="x">${s.bogi}</div>` : ''}
     ${s.more ? `<details class="morebox" id="sx-more"><summary><h2 class="sech mo">더 알아보기<span class="tog"></span></h2></summary><div class="x">${s.more}</div></details>` : ''}
     ${s.rel ? `<h2 class="sech mo" id="sx-rel">관련 개념</h2><div class="rel">${s.rel}</div>` : ''}`;
 }
@@ -255,7 +255,14 @@ let stack = [];
 function onExamItem(){ return /^#\/시험\/[^/]+\/답안지\/\d+$/.test(decodeURIComponent(location.hash)); }
 function curQ(){ const h = decodeURIComponent(location.hash); return h.startsWith('#/문항/') ? h.slice('#/문항/'.length) : onExamItem() ? window.scExamQ || null : null; }
 function srcOf(id){ return byId[id] ? byId[id]['출처'] : (window.scExamSrc || ''); }
+let panelTab = '';
+// 오른쪽 창이 열려 있는 동안 그 아이콘(연필 · ✓ · 커뮤니티 · AI)을 파랗게 (원장 11/03 4차 검토)
+function markIcons(){
+  const on = document.body.classList.contains('panel-open') ? ({'메모': 'memoBtn', '답안지': 'sheetBtn', '커뮤니티': 'commBtn', 'AI': 'aiBtn'})[panelTab] : '';
+  ['memoBtn', 'sheetBtn', 'commBtn', 'aiBtn'].forEach(k => { const b = document.getElementById(k); if (b) b.classList.toggle('act', k === on); });
+}
 function panelHead(tab){
+  panelTab = tab;
   const tabs = [['개념', '개념 카드', stack.length > 0], ['메모', '암기 메모', !!curQ()], ['답안지', onExamItem() ? '내 답안지' : '답안지', true], ['커뮤니티', '커뮤니티', !!curQ()], ['AI', 'AI 질문', !!curQ()]];
   return `<div class="ph"><div class="ptabs">${tabs.filter(t => t[2]).map(t => `<button data-t="${t[0]}" class="${tab === t[0] ? 'on' : ''}">${t[1]}</button>`).join('')}</div>
     <span class="sp"></span><button class="ic" id="px" aria-label="닫기">✕</button></div>`;
@@ -266,6 +273,7 @@ function wirePanel(){
   panel.querySelectorAll('.ptabs button').forEach(b => b.onclick = () => go[b.dataset.t]());
   panel.scrollTop = 0;
   document.body.classList.add('panel-open');
+  markIcons();
 }
 function showConcept(){
   const name = stack[stack.length - 1], c = C[name]; if (!c) return;
@@ -395,8 +403,8 @@ function openSheet(){
     }).join('');
     const mark = r ? `<span class="sr ${r.ok ? 'o' : 'x'}">${r.ok ? '○' : '✕'}</span>` : `<span class="sr"></span>`;
     return `<a class="srow ${q.id === cur ? 'cur' : ''}" href="#/문항/${q.id}"><span class="sn">${i + 1}</span>${mark}${dots}<span class="sq">${un.has(q.id) ? '?' : ''}</span></a>`;
-  }).join('') + `</div><div class="legend"><span><span class="dot mine">3</span> 고른 답(정답 확인 전)</span><span><span class="dot ok">3</span> 맞힌 답</span>
-    <span><span class="dot bad">3</span> 틀리게 고른 답</span><span><span class="dot ans">3</span> 정답</span><span><b class="sq">?</b> 잘 모르는 문제</span></div>`;
+  }).join('') + `</div><div class="legend"><span><span class="dot mine"></span> 고른 답(정답 확인 전)</span><span><span class="dot ok"></span> 내가 고른 답(맞음)</span>
+    <span><span class="dot bad"></span> 내가 고른 답(틀림)</span><span><span class="dot ans"></span> 정답</span><span><b class="sq">?</b> 잘 모르는 문제</span></div>`;
   wirePanel();
 }
 
@@ -410,7 +418,7 @@ function openAI(id){
   wirePanel();
   document.getElementById('aiq').oninput = e => { try { localStorage.setItem('sc.ai.' + id, e.target.value); } catch(_){} };
 }
-function closePanel(){ stack = []; document.body.classList.remove('panel-open'); }
+function closePanel(){ stack = []; document.body.classList.remove('panel-open'); markIcons(); }
 
 document.addEventListener('click', e => {
   const a = e.target.closest('a[href^="#/개념/"]');

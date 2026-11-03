@@ -137,6 +137,7 @@ body.done .bl:hover{background:none}
 .tools{display:flex;gap:6px}
 .ic svg{display:block}
 .ic.on{border-color:var(--primary);color:var(--primary)}
+.ic.act{border-color:var(--primary);color:var(--primary);background:rgba(47,107,255,.1)}   /* 오른쪽 창이 열려 있는 아이콘 */
 /* 답안지 */
 .sheet{display:flex;flex-direction:column;gap:2px;margin-top:8px}
 .srow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px}
@@ -149,22 +150,23 @@ body.done .bl:hover{background:none}
 .dot.ans{border:2px solid var(--primary);color:var(--primary);font-weight:700}
 .dot.bad{background:var(--danger);border-color:var(--danger);color:#fff}
 .sr{width:18px;font-weight:700;text-align:center}.sr.o{color:var(--primary)}.sr.x{color:var(--danger)}
-.omrpage .sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));column-gap:24px;row-gap:2px;margin:16px 0}
+.omrpage .sheet{display:block;columns:3 280px;column-gap:24px;margin:16px 0}   /* 1 · 2 · 3 … 위에서 아래로 */
+.omrpage .srow{break-inside:avoid}
 .omrpage .srow{padding:8px}
 /* 해설 묶음 — 바로 가기 단추 · 큰 제목(색 띠) · 더 알아보기 접기 (원장 11/03 3차 검토) */
 .jump{display:flex;flex-wrap:wrap;gap:6px;margin:24px 0 4px}
 .jump a{padding:6px 14px;border:1px solid var(--line-strong);border-radius:999px;font-size:14px;font-weight:600;background:var(--bg)}
 .jump a:hover{border-color:var(--primary);color:var(--primary)}
 .sech{font-size:19px;font-weight:700;margin:36px 0 10px;padding:8px 12px;border-left:4px solid var(--primary);background:var(--soft);border-radius:0 6px 6px 0;scroll-margin-top:130px}
-.sech.bogi{border-left-color:var(--ok)}
+.sech.bg{border-left-color:var(--ok)}   /* .bogi(＜보기＞ 상자)와 이름이 겹쳐 굵은 테두리가 생겼던 것을 고침 */
 .sech.mo{border-left-color:var(--line-strong)}
 details.morebox{scroll-margin-top:130px}
-details.morebox > summary{list-style:none;cursor:pointer}
+details.morebox > summary{list-style:none;cursor:pointer;outline:none}
 details.morebox > summary::-webkit-details-marker{display:none}
 details.morebox .tog{margin-left:10px;font-size:14px;font-weight:600;color:var(--primary)}
 details.morebox .tog::after{content:'▾ 펼치기'}
 details.morebox[open] .tog::after{content:'▴ 접기'}
-details.morebox .x .h3{font-size:16px;color:#555}
+details.morebox .x .h3{font-size:18px;color:var(--text);padding-left:10px;border-left:3px solid var(--line-strong)}   /* 더 알아보기 안 소제목 — 아이패드에서도 눈에 띄게 */
 .excrumb{font-size:15px;color:var(--sub);display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .excrumb a{color:var(--sub)}.excrumb a:hover{color:var(--primary)}
 .excrumb b{color:var(--text);font-size:17px}
@@ -246,8 +248,8 @@ body.done .after{display:block}
 <div id="gate" style="display:none"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="sync.js?v=1"></script>
-<script src="exam.js?v=4"></script>
-<script src="boot.js?v=8"></script>
+<script src="exam.js?v=5"></script>
+<script src="boot.js?v=9"></script>
 
 </body>
 </html>

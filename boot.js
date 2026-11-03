@@ -163,7 +163,7 @@ async function adminScreen(msg) {
 function startApp(isAdmin) {
   gate.style.display = 'none'; layout.style.display = '';
   const s = document.createElement('script');
-  s.src = 'app.js?v=2';
+  s.src = 'app.js?v=3';
   window.scIsAdmin = isAdmin;
   document.body.appendChild(s);
   const top = document.querySelector('.top .in');

@@ -38,8 +38,8 @@ function conceptHTML(c, inPanel){
   // 지금 보고 있는 문제는 같은 주소라 눌러도 움직이지 않는다 → 「지금 보는 문제」로 표시하고 누르면 문제 맨 위로(원장 10/30)
   const cur = (decodeURIComponent(location.hash).match(/^#\/문항\/(.+)$/) || [])[1] || '';
   const qs = c['문항'].map(id => id === cur
-    ? `<li><a href="javascript:void(0)" onclick="window.scrollTo({top:0,behavior:'smooth'})"><b>${esc(byId[id]['출처'])}</b><span class="badge">지금 보는 문제 · 맨 위로</span></a></li>`
-    : `<li><a href="#/문항/${id}"><b>${esc(byId[id]['출처'])}</b><span class="badge">${esc(byId[id]['자료유형'])}</span></a></li>`).join('');
+    ? `<li><a href="javascript:void(0)" onclick="window.scrollTo({top:0,behavior:'smooth'})"><b>${esc(srcOf(id))}</b><span class="badge">지금 보는 문제 · 맨 위로</span></a></li>`
+    : `<li><a href="#/문항/${id}"><b>${esc(srcOf(id))}</b><span class="badge">${esc(byId[id]['자료유형'])}</span></a></li>`).join('');
   const rel = c['관련'].map(r => `<a class="lk" href="#/개념/${esc(r['카드'])}">${esc(r['말'])}</a>`).join(' · ');
   return `<div class="cname">${esc(c['이름'])}</div><div class="cmeta">${meta}</div>${secs}
     <h2>이 개념 관련 문제 풀기 (${c['문항'].length}문항)</h2><ul class="qlist">${qs || '<li class="sub">아직 이 개념이 나오는 문제가 없습니다.</li>'}</ul>
@@ -235,9 +235,12 @@ function concept(name){
 // 오른쪽 패널: 문제를 보면서 파란 낱말을 누르면 개념 카드를 옆에 연다(패널 안에서도 계속 이동)
 // 패널 탭: 「개념 카드」 · 「메모」 (알렌의 시험메모 · 답안지처럼)
 let stack = [];
-function curQ(){ const h = decodeURIComponent(location.hash); return h.startsWith('#/문항/') ? h.slice('#/문항/'.length) : null; }
+// 시험 답안지의 한 문항 화면(#/시험/MP-…/답안지/3)도 문제 화면처럼 오른쪽 패널(개념 카드 · 메모 · 커뮤니티 · AI)을 쓴다
+function onExamItem(){ return /^#\/시험\/[^/]+\/답안지\/\d+$/.test(decodeURIComponent(location.hash)); }
+function curQ(){ const h = decodeURIComponent(location.hash); return h.startsWith('#/문항/') ? h.slice('#/문항/'.length) : onExamItem() ? window.scExamQ || null : null; }
+function srcOf(id){ return byId[id] ? byId[id]['출처'] : (window.scExamSrc || ''); }
 function panelHead(tab){
-  const tabs = [['개념', '개념 카드', stack.length > 0], ['메모', '암기 메모', !!curQ()], ['답안지', '답안지', true], ['커뮤니티', '커뮤니티', !!curQ()], ['AI', 'AI 질문', !!curQ()]];
+  const tabs = [['개념', '개념 카드', stack.length > 0], ['메모', '암기 메모', !!curQ()], ['답안지', '답안지', !onExamItem()], ['커뮤니티', '커뮤니티', !!curQ()], ['AI', 'AI 질문', !!curQ()]];
   return `<div class="ph"><div class="ptabs">${tabs.filter(t => t[2]).map(t => `<button data-t="${t[0]}" class="${tab === t[0] ? 'on' : ''}">${t[1]}</button>`).join('')}</div>
     <span class="sp"></span><button class="ic" id="px" aria-label="닫기">✕</button></div>`;
 }
@@ -266,7 +269,7 @@ function openMemo(id){
   if (!id) return;
   let html = ''; try { html = localStorage.getItem(memoKey(id)) || ''; } catch(e){}
   const pal = (kind, list) => `<div class="pal" id="pal-${kind}">${list.map(c => `<button data-${kind}="${c[1]}" title="${c[0]}"><span style="${kind === 'hi' ? 'background' : 'color'}:${c[1] === 'transparent' ? '#fff' : c[1]}">${kind === 'hi' ? (c[1] === 'transparent' ? '✕' : '&nbsp;') : 'A'}</span></button>`).join('')}</div>`;
-  panel.innerHTML = panelHead('메모') + `<div class="sub">${esc(byId[id]['출처'])}</div>
+  panel.innerHTML = panelHead('메모') + `<div class="sub">${esc(srcOf(id))}</div>
     <div class="tbar">
       <select id="fmt" title="글자 모양"><option value="p">본문</option><option value="h3">제목</option><option value="h4">소제목</option></select>
       <span class="sep"></span>
@@ -347,7 +350,7 @@ function loadPosts(id){ try { return JSON.parse(localStorage.getItem('sc.comm.' 
 function openComm(id){
   if (!id) return;
   const posts = loadPosts(id);
-  panel.innerHTML = panelHead('커뮤니티') + `<div class="sub">${esc(byId[id]['출처'])}</div>
+  panel.innerHTML = panelHead('커뮤니티') + `<div class="sub">${esc(srcOf(id))}</div>
     <textarea id="cq" class="search" style="height:120px;border-radius:6px;padding:12px;margin-top:8px" placeholder="이 문제에서 헷갈린 점이나 다른 학생에게 도움이 될 풀이를 적어 주세요."></textarea>
     <button class="btn btn-p" id="cqGo" style="width:100%;justify-content:center">게시글 작성하기</button>
     <div class="sub" style="margin:8px 0 16px">지금은 이 기기에만 저장됩니다. 학원 서버가 생기면 모든 학생이 함께 봅니다.</div>
@@ -385,7 +388,7 @@ function openSheet(){
 function openAI(id){
   if (!id) return;
   let t = ''; try { t = localStorage.getItem('sc.ai.' + id) || ''; } catch(e){}
-  panel.innerHTML = panelHead('AI') + `<div class="sub">${esc(byId[id]['출처'])}</div>
+  panel.innerHTML = panelHead('AI') + `<div class="sub">${esc(srcOf(id))}</div>
     <p>이 문제에서 궁금한 점을 적어 두세요. <b>AI 답변은 앱을 서버에 올릴 때 연결합니다.</b></p>
     <textarea id="aiq" class="search" style="height:140px;border-radius:6px;padding:12px" placeholder="예: ㄷ에서 비율은 왜 Ⅱ가 더 높아요?">${esc(t)}</textarea>`;
   wirePanel();
@@ -396,7 +399,7 @@ function closePanel(){ stack = []; document.body.classList.remove('panel-open');
 document.addEventListener('click', e => {
   const a = e.target.closest('a[href^="#/개념/"]');
   if (!a) return;
-  const onProblem = decodeURIComponent(location.hash).startsWith('#/문항/') || !!a.closest('.panel');
+  const onProblem = decodeURIComponent(location.hash).startsWith('#/문항/') || onExamItem() || !!a.closest('.panel');
   if (onProblem && !a.classList.contains('btn')){
     e.preventDefault();
     openPanel(decodeURIComponent(a.getAttribute('href').slice('#/개념/'.length)));
@@ -408,12 +411,13 @@ function route(){
   const [, kind, arg] = h.split('/');
   closePanel();   // 화면이 바뀌면 패널은 닫는다(패널 안 개념 이동은 주소를 바꾸지 않음)
   window.scExamStop();
-  if (kind === '시험'){ document.body.classList.remove('done'); window.scExam(arg, h.split('/')[3]); }
+  if (kind === '시험'){ document.body.classList.remove('done'); window.scExam(arg, h.split('/')[3], h.split('/')[4]); }
   else if (kind === '문항') problem(arg);
   else if (kind === '개념') concept(arg);
   else if (kind === '목록') home(arg);
   else { document.body.classList.remove('done'); home(); }
   window.scrollTo(0, 0);
 }
+window.scUI = { ICON, loadSet, saveSet, openMemo, openComm, openAI };
 window.addEventListener('hashchange', route);
 route();

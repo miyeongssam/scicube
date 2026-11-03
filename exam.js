@@ -7,7 +7,10 @@
 .exhead{position:sticky;top:57px;z-index:10;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 0;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
 .extime{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
 .extime.low{color:var(--danger)}
-.exomr{display:flex;flex-wrap:wrap;gap:4px;width:100%}
+.exomr{display:flex;flex-wrap:wrap;gap:4px;flex:1 1 320px;min-width:0}
+.exbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;width:100%}
+.exnav{display:flex;align-items:center;gap:8px;margin-left:auto}
+.exnav .exnote{min-width:54px;text-align:center}
 .exomr a{min-width:32px;height:32px;padding:0 4px;border:1px solid var(--line-strong);border-radius:6px;display:grid;place-items:center;font-size:13px}
 .exomr a.on{background:var(--primary);border-color:var(--primary);color:#fff}
 .exomr a.cur{outline:2px solid var(--primary);outline-offset:1px}
@@ -51,8 +54,8 @@
   const NUM = ['', '①', '②', '③', '④', '⑤'];
   const e = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const v = () => document.getElementById('view');
-  let clock = null, track = null;
-  const stopClock = () => { if (clock) clearInterval(clock); if (track) clearInterval(track); clock = track = null; const m = document.getElementById('exM'); if (m) m.remove(); };
+  let clock = null, track = null, keys = null;
+  const stopClock = () => { if (clock) clearInterval(clock); if (track) clearInterval(track); if (keys) document.removeEventListener('keydown', keys); clock = track = keys = null; const m = document.getElementById('exM'); if (m) m.remove(); };
   const mmss = s => s == null ? '—' : `${Math.floor(s / 60)}분 ${s % 60}초`;
   const day = t => t ? new Date(t).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', weekday: 'short' }) : '';
   const when = t => t ? new Date(t).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
@@ -140,8 +143,10 @@
     const ans = getJ(akey), secs = getJ(skey);
     let cur = 0;
     v().innerHTML = `<h1>${e(x.name)}${x.try > 1 ? ` <span class="exnote">${x.try}회 풀이</span>` : ''}</h1>
-      <div class="exhead"><span class="extime" id="exT"></span><span class="exnote" id="exC"></span><span style="flex:1"></span><button class="btn btn-p" id="exGo">제출하기</button>
-        <div class="exomr" id="exO">${x.items.map((q, i) => `<a href="javascript:void 0" data-i="${i}">${q.no}</a>`).join('')}</div></div>
+      <div class="exhead"><span class="extime" id="exT"></span><span class="exnote" id="exC"></span>
+        <div class="exbar"><div class="exomr" id="exO">${x.items.map((q, i) => `<a href="javascript:void 0" data-i="${i}">${q.no}</a>`).join('')}</div>
+          <span class="exnav"><button class="btn btn-s" id="exTP">‹ 이전</button><span class="exnote" id="exTN"></span><button class="btn btn-s" id="exTX">다음 ›</button>
+            <button class="btn btn-p" id="exGo">제출하기</button></span></div></div>
       <div id="exP"></div>`;
     const P = document.getElementById('exP');
     const paintBar = () => {
@@ -170,6 +175,10 @@
       if (pv) pv.onclick = () => show(cur - 1);
       if (nx) nx.onclick = () => show(cur + 1);
       if (g2) g2.onclick = ask;
+      // 위쪽 줄 ‹ 이전 · n / N · 다음 › (원장 11/03 — 스크롤하지 않고 넘기기)
+      document.getElementById('exTN').textContent = `${cur + 1} / ${x.items.length}`;
+      document.getElementById('exTP').disabled = !cur;
+      document.getElementById('exTX').disabled = last;
       paintBar();
       window.scrollTo(0, 0);
     };
@@ -208,6 +217,14 @@
       m.querySelectorAll('.left a').forEach(a => a.onclick = () => { closeAsk(); show(+a.dataset.i); });
     }
     document.getElementById('exGo').onclick = ask;
+    document.getElementById('exTP').onclick = () => show(cur - 1);
+    document.getElementById('exTX').onclick = () => show(cur + 1);
+    // 키보드 ← → 로도 넘김(글 쓰는 칸에 있을 때 · 확인 창이 떠 있을 때는 빼고)
+    keys = ev => {
+      if (!document.getElementById('exO') || document.getElementById('exM') || /INPUT|TEXTAREA/.test(ev.target.tagName) || ev.target.isContentEditable) return;
+      if (ev.key === 'ArrowRight') show(cur + 1); else if (ev.key === 'ArrowLeft') show(cur - 1);
+    };
+    document.addEventListener('keydown', keys);
     show(0);
     // 문항별 시간: 지금 열린 쪽의 문항에 1초씩
     track = setInterval(() => {

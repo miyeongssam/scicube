@@ -22,7 +22,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 
 /* 본문 + 오른쪽 패널 */
 .layout{display:flex;align-items:flex-start}
-.main{flex:1;min-width:0}
+.main{flex:1;min-width:0;overflow-x:clip}   /* 넓은 그림 · 표가 화면을 옆으로 밀어 왼쪽이 잘리지 않게(원장 11/03) */
+html,body{overflow-x:clip}
+.panel{overflow-x:hidden}
 .wrap{max-width:1060px;margin:0 auto;padding:20px 24px 120px}   /* 화면을 꽉 채우지 않고 가운데(알렌과 비슷한 폭) */
 .panel{display:none;position:sticky;top:57px;width:max(380px,40vw);   /* 본문 6 : 패널 4 (원장 10/28) */height:calc(100vh - 57px);overflow:auto;border-left:1px solid var(--line);background:var(--bg);padding:16px 20px 60px}
 body.panel-open .panel{display:block}
@@ -248,7 +250,7 @@ body.done .after{display:block}
 <div id="gate" style="display:none"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="sync.js?v=1"></script>
-<script src="exam.js?v=9"></script>
+<script src="exam.js?v=10"></script>
 <script src="boot.js?v=10"></script>
 
 </body>

@@ -242,7 +242,10 @@
     const b = document.getElementById('exBad'); if (b) b.onclick = () => setWrongOnly(true);
     r.items.forEach(q => window.scSync.stats(q.id).then(s => {
       const el = v().querySelector(`[data-rate="${CSS.escape(q.id)}"]`);
-      if (el && s && s.rate != null) el.textContent = s.rate + '%';
+      if (!el) return;
+      // 푼 사람이 10명이 안 되면 정답률을 보이지 않는다(D-486 — 1명이면 0% · 100%로만 나와 헷갈림)
+      if (s && s.rate != null && s.count >= 10) el.textContent = s.rate + '%';
+      else { const p = el.parentElement; p.innerHTML = p.innerHTML.replace(/ ?(· )?정답률 <b[^>]*>—<\/b>/, ''); }
     }).catch(() => {}));
   }
 

@@ -118,7 +118,7 @@ function wireJump(root){
 function relHTML(id){ const q = byId[id]; return q ? q['관련'].map(r => `<a class="lk" href="#/개념/${esc(r['카드'])}">${esc(r['말'])}</a>`).join(' · ') : ''; }
 
 // 문항 한 장 화면의 부품 — 문제 화면 · 시험 해설(exam.js)이 똑같이 쓴다. 한 곳만 고치면 두 화면이 함께 바뀐다
-// (원장 11/03 「약속했는데 평가 1회로 풀면 왜 또 다 달라지나」 — 결정 D-487)
+// (원장 11/03 「약속했는데 평가 1회로 풀면 왜 또 다 달라지나」 — 결정 D-488)
 function toolsHTML(id){
   return `<span class="tools">
     <button class="ic ${loadSet('sc.bm').has(id) ? 'on' : ''}" id="bmBtn" title="북마크(나중에 다시 볼 문제)">${ICON.bm}</button>

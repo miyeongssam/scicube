@@ -259,7 +259,7 @@
     window.scExamQ = q.id; window.scExamSrc = q.source;
     document.body.classList.add('done');
     window.scExamSheet = () => U.panelOpen('답안지', `<div class="sub">${e(r.name)} · ${r.score}점</div>` + omrHTML(r, id, q.no));
-    // 문제 화면과 같은 부품(app.js toolsHTML · resultHTML · statInner · solHTML · tailHTML · wireItem — 결정 D-487).
+    // 문제 화면과 같은 부품(app.js toolsHTML · resultHTML · statInner · solHTML · tailHTML · wireItem — 결정 D-488).
     // 시험에서 온 때만 위 위치 줄 · 아래 「틀린 문항만 넘기기」가 다르다
     const times = U.loadAttempts().filter(a => a['문항'] === q.id).length + 1;
     v().innerHTML = `<div class="bar1"><div class="excrumb"><a href="#/시험">시험</a> › <a href="#/시험/${e(id)}/답안지">${e(r.name)}</a> › <b>${q.no}번</b></div>

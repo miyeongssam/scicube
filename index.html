@@ -20,6 +20,7 @@
 
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--text);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:var(--fs);line-height:28px}   /* 알렌 실측: 줄 높이 28px · 자간 보통 */
+html,body{word-break:keep-all;overflow-wrap:break-word}   /* 낱말 가운데서 줄이 끊기지 않게(원장 11/05 아이패드 「전자기와 양 / 자」) */
 a{color:inherit;text-decoration:none}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
 
@@ -28,6 +29,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .top .in{max-width:1200px;margin:0 auto;height:56px;padding:0 16px;display:flex;align-items:center;gap:16px}
 .logo{font-size:20px;font-weight:700;color:var(--primary)}
 .crumb{font-size:15px;color:var(--sub)}
+.backb{font-size:22px;line-height:1;padding:4px 10px;border:1px solid var(--line);border-radius:8px;color:#444}   /* ‹ 뒤로 — 설치한 앱엔 브라우저 뒤로 단추가 없다(원장 11/05) */
+body.athome .backb,.gate-on .backb{display:none}
 
 /* 본문 + 오른쪽 패널 */
 .layout{display:flex;align-items:flex-start}
@@ -285,19 +288,19 @@ body.done .after{display:block}
 .adno{width:120px;height:36px;margin:0;font-size:14px}
 </style>
 </head>
-<body>
-<div class="top"><div class="in"><a class="logo" href="#/">사이큐브</a><span class="crumb">통합과학 › 진화와 생물다양성</span></div></div>
+<body class="athome">
+<div class="top"><div class="in"><button class="backb" id="backB" title="뒤로" onclick="history.back()">‹</button><a class="logo" href="#/">사이큐브</a><span class="crumb"></span></div></div>
 <div class="layout">
   <div class="main"><div class="wrap" id="view"></div></div>
   <aside class="panel" id="panel"></aside>
 </div>
 <div id="gate" style="display:none"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="units.js?v=1"></script>
+<script src="units.js?v=2"></script>
 <script src="sync.js?v=2"></script>
-<script src="exam.js?v=12"></script>
+<script src="exam.js?v=13"></script>
 <script src="install.js?v=1"></script>
-<script src="boot.js?v=13"></script>
+<script src="boot.js?v=14"></script>
 
 </body>
 </html>

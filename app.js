@@ -68,7 +68,10 @@ function home(tab){
   wireFind();
 }
 
-function UNAME(u){ for (const s of (window.SC_UNITS || [])) for (const m of s.majors) for (const d of m.mids) for (const x of d.subs) if (x.unit === u) return x.name; return u; }
+// 소단원 이름 — 단원키(과목코드:소단원)로 찾는다. 같은 이름의 소단원이 두 과목에 있어도 과목이 섞이지 않게(검토 L9)
+function UNAME(u){ const byKey = String(u).includes(':'); for (const s of (window.SC_UNITS || [])) for (const m of s.majors) for (const d of m.mids) for (const x of d.subs) if (byKey ? x.key === u : x.unit === u) return x.name; return byKey ? String(u).split(':').pop() : u; }
+// 화면 맨 위 한 줄 안내(없는 주소로 왔을 때 등 — 검토 L12)
+function notice(msg){ const p = document.createElement('p'); p.className = 'exnote notice'; p.textContent = msg; view.prepend(p); }
 
 // 해설 묶음(문제 화면 · 시험 답안지 함께): 바로 가기 단추 → 해설 → 보기 해설 → 더 알아보기(접어 둠) → 관련 개념 (원장 11/03 3차 검토)
 function solHTML(s){
@@ -136,18 +139,28 @@ function wireItem(id, sheet){
 }
 
 function problem(id){
-  const q = byId[id]; if (!q) return home();
-  // 풀기 묶음(단원별 · 오답노트 · 오늘의 문항) 안의 문항이면 그 차례로 넘긴다
-  const S = sess(), inS = !!(S && S.ids.includes(id)), L = inS ? S.ids.map(x => byId[x]).filter(Boolean) : Q;
+  const q = byId[id]; if (!q){ homeV(); return notice('찾는 문항이 없어 홈으로 왔습니다.'); }
+  // 풀기 묶음(단원별 · 오답노트 · 오늘의 문항) 안의 문항이면 그 차례로 넘긴다. 묶음 밖이면 같은 소단원 안에서만(검토 L7)
+  const S = sess(), inS = !!(S && S.ids.includes(id)), L = inS ? S.ids.map(x => byId[x]).filter(Boolean) : Q.filter(x => keyOf(x) === keyOf(q));
   const i = L.indexOf(q), prev = L[i - 1], next = L[i + 1];
+  const subj = keyOf(q).split(':')[0];   // 「단원 목록」은 그 문항의 과목으로(검토 L8)
+  // 받은 시험(아직 안 낸 것)에 든 문항은 시험을 낸 뒤에 연습으로 연다 — 정답이 미리 보이지 않게(검토 L1)
+  if (lockedIds().has(id)){
+    document.body.classList.remove('done'); crumbSet(inS ? S.title : UNAME(keyOf(q)));
+    view.innerHTML = `${inS ? sessBar(S, id) : `<div class="bar1"><h1>${esc(UNAME(keyOf(q)))}</h1><div class="nav"><a class="btn btn-s" href="#/과목/${subj}">단원 목록</a></div></div>`}
+      <div class="card" style="margin-top:16px"><b>받은 시험에 들어 있는 문항입니다</b><div class="sub">시험을 낸 뒤에 여기서 풀 수 있어요. <a href="#/시험">시험 목록</a></div></div>
+      <div class="check" style="justify-content:space-between;margin-top:24px">${prev ? `<a class="btn btn-s" href="#/문항/${prev.id}">‹ 이전 문제</a>` : '<span></span>'}${next ? `<a class="btn btn-s" href="#/문항/${next.id}">다음 문제 ›</a>` : inS ? `<a class="btn btn-p" href="#/풀기/끝">끝내기 ›</a>` : '<span></span>'}</div>`;
+    if (inS) wireSess(S);
+    return;
+  }
   const saved = loadRes()[id];
   let sel = saved ? saved.sel : 0;
-  const t0 = Date.now();   // 나의 풀이 시간: 문제를 연 때부터 「정답 확인」까지
+  let t0 = Date.now();   // 나의 풀이 시간: 문제를 연 때부터 「정답 확인」까지 — [다시 풀기]를 누르면 다시 잰다(검토 L5)
   document.body.classList.toggle('done', !!saved);
   const rel = q['관련'].map(r => `<a class="lk" href="#/개념/${esc(r['카드'])}">${esc(r['말'])}</a>`).join(' · ');
   view.innerHTML = `
-    ${inS ? sessBar(S, id) : `<div class="bar1"><h1>${esc(UNAME(q['소단원']))}</h1>
-      <div class="nav"><a class="btn btn-s" href="#/과목/IS1">단원 목록</a>
+    ${inS ? sessBar(S, id) : `<div class="bar1"><h1>${esc(UNAME(keyOf(q)))}</h1>
+      <div class="nav"><a class="btn btn-s" href="#/과목/${subj}">단원 목록</a>
         <a class="ic" ${prev ? `href="#/문항/${prev.id}"` : 'style="color:var(--line)"'}>‹</a><span>${i + 1} / ${L.length}</span>
         <a class="ic" ${next ? `href="#/문항/${next.id}"` : 'style="color:var(--line)"'}>›</a></div></div>`}
     <div class="bar2"><span class="qno">${esc(q['출처'])}</span><span class="badge">${esc(q['자료유형'])}</span>${q['배점'] ? `<span class="sub">${esc(q['배점'])}점</span>` : ''}
@@ -163,7 +176,7 @@ function problem(id){
       ${tailHTML(id)}
       <div class="check" style="justify-content:space-between;margin-top:32px">
         ${prev ? `<a class="btn btn-s" href="#/문항/${prev.id}">‹ 이전 문제</a>` : '<span></span>'}
-        ${next ? `<a class="btn btn-s" href="#/문항/${next.id}">다음 문제 ›</a>` : inS ? `<a class="btn btn-p" href="#/풀기/끝">끝내기 ›</a>` : `<a class="btn btn-s" href="#/과목/IS1">단원 목록</a>`}</div>
+        ${next ? `<a class="btn btn-s" href="#/문항/${next.id}">다음 문제 ›</a>` : inS ? `<a class="btn btn-p" href="#/풀기/끝">끝내기 ›</a>` : `<a class="btn btn-s" href="#/과목/${subj}">단원 목록</a>`}</div>
     </div>`;
   wireJump(view);
   const chs = [...view.querySelectorAll('.ch')], check = document.getElementById('check');
@@ -210,7 +223,7 @@ function problem(id){
       document.getElementById('stat').innerHTML = statInner(id, last.secs, mine.length);
       fillStats(id);
       check.innerHTML = `<button class="btn btn-s" id="again">다시 풀기</button>`;
-      document.getElementById('again').onclick = () => { document.body.classList.remove('done'); sel = 0; Object.keys(out).forEach(k => delete out[k]); Object.keys(bogi).forEach(b => delete bogi[b]); outCorrect = false; clearRes(id); paint(); };
+      document.getElementById('again').onclick = () => { document.body.classList.remove('done'); sel = 0; t0 = Date.now(); Object.keys(out).forEach(k => delete out[k]); Object.keys(bogi).forEach(b => delete bogi[b]); outCorrect = false; clearRes(id); paint(); };
     } else {
       check.innerHTML = `<button class="btn btn-p" id="go" ${sel ? '' : 'disabled'}>정답 확인</button>`;
       document.getElementById('go').onclick = () => { if (!sel) return; const secs = Math.round((Date.now() - t0) / 1000);
@@ -229,7 +242,7 @@ function problem(id){
   });
   wireItem(id, () => openSheet());
   if (inS){ wireSess(S); if (S.pAt){ view.querySelector('.stem').style.visibility = 'hidden'; view.querySelector('.choices').style.visibility = 'hidden'; } }
-  crumbSet(inS ? S.title : UNAME(q['소단원']));
+  crumbSet(inS ? S.title : UNAME(keyOf(q)));
   paint();
 }
 
@@ -382,9 +395,12 @@ function openComm(id){
 }
 
 // 답안지: 17문항 번호마다 내가 고른 답 · 정답 · 잘 모르는 문제(?)를 한눈에, 누르면 그 문제로
+// 범위: 풀기 묶음 안이면 그 묶음, 밖이면 지금 문항의 소단원(검토 L6)
 function openSheet(){
   const res = loadRes(), pick = loadPick(), un = loadSet('sc.unsure'), cur = curQ();
-  panel.innerHTML = panelHead('답안지') + `<div class="sheet">` + Q.map((q, i) => {
+  const S = sess(), cq = byId[cur];
+  const L = S && S.ids.includes(cur) ? S.ids.map(x => byId[x]).filter(Boolean) : cq ? Q.filter(x => keyOf(x) === keyOf(cq)) : Q;
+  panel.innerHTML = panelHead('답안지') + `<div class="sheet">` + L.map((q, i) => {
     const r = res[q.id], my = r ? r.sel : (pick[q.id] || {}).sel;
     const dots = [1, 2, 3, 4, 5].map(k => {
       let c = '';
@@ -448,7 +464,8 @@ function memoIds(){ return Q.filter(q => { try { return (localStorage.getItem('s
 function pickIds({keys, ids, kind, n, shuffle}){
   const h = solveLog(), wrong = new Set(wrongIds(h)), un = loadSet('sc.unsure'), bm = loadSet('sc.bm');
   const F = {'전체': () => true, '안 푼 것': q => !h[q.id], '틀린 것': q => wrong.has(q.id), '헷갈림 · 북마크': q => un.has(q.id) || bm.has(q.id)};
-  let list = (ids ? ids.map(i => byId[i]).filter(Boolean) : keys ? qsOfKeys(keys) : Q).filter(F[kind] || F['전체']);
+  const lock = lockedIds();   // 받은 시험(아직 안 낸 것)의 문항은 연습 묶음에서 뺀다(검토 L1)
+  let list = (ids ? ids.map(i => byId[i]).filter(Boolean) : keys ? qsOfKeys(keys) : Q).filter(q => !lock.has(q.id)).filter(F[kind] || F['전체']);
   if (shuffle) list = list.map(q => [Math.random(), q]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
   return list.slice(0, n === '전부' || !n ? list.length : +n).map(q => q.id);
 }
@@ -476,16 +493,20 @@ function sessBar(S, id){
 function wireSess(S){
   clearInterval(sesClock);
   const T = document.getElementById('sesT'); if (!T) return;
-  const tick = () => { const s = sesLeft(S); T.textContent = s > 0 ? `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : '시간 끝'; T.classList.toggle('low', s <= 60); };
+  const tick = () => { const s = sesLeft(S); T.textContent = s > 0 ? `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : '시간 끝'; T.classList.toggle('low', s <= 60);
+    if (s <= 0 && !S.pAt){ clearInterval(sesClock); location.hash = '#/풀기/끝/시간'; } };   // 시간이 다 되면 결과로(검토 L4)
   tick(); sesClock = setInterval(tick, 1000);
   document.getElementById('sesP').onclick = () => {
     const s2 = sess(); if (s2.pAt){ s2.paused += Date.now() - s2.pAt; s2.pAt = null; } else s2.pAt = Date.now();
     saveSess(s2); problem(decodeURIComponent(location.hash).slice('#/문항/'.length));
   };
 }
-function sessEnd(){
+function sessEnd(why){
   const S = sess(); if (!S) return homeV();
   const res = loadRes(), done = S.ids.filter(id => res[id]), ok = done.filter(id => res[id].ok), bad = done.filter(id => !res[id].ok);
+  // 안 푼 문항이 있으면 한 번 묻는다(검토 B5 · 원장 11/05 아이패드). 시간이 다 돼서 온 때는 묻지 않음
+  if (why !== '시간' && done.length < S.ids.length && !confirm(`${S.ids.length - done.length}문항을 아직 안 풀었어요. 끝낼까요?`)){ history.back(); return; }
+  saveSess(null);   // 끝낸 묶음은 지운다 — 그 문항을 다시 열어도 묶음 바 · 타이머가 다시 뜨지 않게(검토 L3)
   view.innerHTML = `<div class="excrumb"><a href="#/">홈</a> › ${esc(S.title)}</div><h1>${esc(S.title)} — 결과</h1>
     <div class="cards3"><div class="card"><div class="sub">맞힌 문항</div><div class="exscore">${ok.length} / ${S.ids.length}</div></div>
       <div class="card"><div class="sub">푼 문항</div><div class="exscore">${done.length}</div></div><div class="card"><div class="sub">틀린 문항</div><div class="exscore" style="color:var(--danger)">${bad.length}</div></div></div>
@@ -499,7 +520,7 @@ function qRows(ids, extra){
   const res = loadRes();
   return `<div class="rows">${ids.map((id, i) => { const q = byId[id]; if (!q) return ''; const r = res[id];
     const first = (q['문제'].match(/<p[^>]*>(.*?)<\/p>/) || ['', ''])[1].replace(/<[^>]+>/g, '');
-    return `<a class="row" href="#/문항/${id}"><span class="no">${i + 1}</span><span class="t">${esc(q['출처'])} <span class="sub">· ${esc(UNAME(q['소단원']))}</span><span class="pv">${first}</span></span>
+    return `<a class="row" href="#/문항/${id}"><span class="no">${i + 1}</span><span class="t">${esc(q['출처'])} <span class="sub">· ${esc(UNAME(keyOf(q)))}</span><span class="pv">${first}</span></span>
       ${extra ? `<span class="sub">${extra(id)}</span>` : ''}<span class="mark ${r ? (r.ok ? 'ok' : 'bad') : ''}">${r ? (r.ok ? '○' : '✕') : ''}</span></a>`; }).join('')}</div>`;
 }
 
@@ -514,7 +535,8 @@ function todayPack(){
     t = {day: today(), n: set.n, ids, started: false};
     try { localStorage.setItem('sc.today', JSON.stringify(t)); } catch(e){}
   }
-  return t;
+  const lock = lockedIds();   // 받은 시험이 새로 오면 그 문항은 오늘 묶음에서도 뺀다(검토 L1)
+  return Object.assign({}, t, {ids: t.ids.filter(id => !lock.has(id))});
 }
 
 // 왼쪽 메뉴(태블릿 · PC) — 좁은 화면에서는 위쪽 가로 줄
@@ -530,8 +552,21 @@ function sideNav(){
   nav.innerHTML = SIDE.map(([t, href]) => `<a class="si ${on(href) ? 'on' : ''}" href="${href}">${t}${t === '시험' ? '<b class="sbadge" id="sideExam"></b>' : ''}</a>`).join('')
     + `<div class="sh">과목</div>` + subj.map(([t, c]) => `<a class="si ${curS && (curS === c || (grp && grp === (SUBJ[c] || {}).group && c !== 'IS1')) ? 'on' : ''}" href="#/과목/${c}">${t}</a>`).join('');
 }
+// 시험 목록은 1분 동안 기억해 화면을 옮길 때마다 서버를 부르지 않는다(검토 L11). 시험을 시작 · 멈춤 · 제출하면 exam.js 가 지운다
+let examCache = null, examCacheAt = 0;
+async function examList(force){
+  if (!force && examCache && Date.now() - examCacheAt < 60000) return examCache;
+  const { data } = await sb.rpc('exam_list');
+  examCache = data || []; examCacheAt = Date.now();
+  // 받은 시험 가운데 아직 한 번도 안 낸 것의 문항 = 연습에서 잠글 문항(검토 L1). 원장님(관리자)은 잠그지 않음
+  const lock = window.scIsAdmin ? [] : examCache.filter(s => s.open && !(s.tries || []).length).flatMap(s => s.qids || []);
+  try { localStorage.setItem('sc.lock', JSON.stringify(lock)); } catch(e){}
+  return examCache;
+}
+window.scExamListReset = () => { examCache = null; };
+function lockedIds(){ try { return new Set(JSON.parse(localStorage.getItem('sc.lock') || '[]')); } catch(e){ return new Set(); } }
 async function examCount(){
-  try { const { data } = await sb.rpc('exam_list'); return (data || []).filter(s => s.open && (s.started || !(s.tries || []).length)); } catch(e){ return []; }
+  try { return (await examList()).filter(s => s.open && (s.started || !(s.tries || []).length)); } catch(e){ return []; }
 }
 function crumbSet(t){ const c = document.querySelector('.top .crumb'); if (c) c.textContent = t; }
 
@@ -569,9 +604,17 @@ function subjectV(code, tab, arg){
     <h1>${esc(S0.name)}</h1><div class="menu">${tabs.map(([k, t]) => `<a class="${k === tab ? 'on' : ''}" href="#/과목/${code}/${k}">${t}</a>`).join('')}</div>`;
   if (tab === '단원') return unitPick(S0, head, arg);
   if (tab === '개념'){ view.innerHTML = head + conceptListHTML(); wireFind(); return; }
+  // 학원 모의평가: 그 과목 시험만(원장 11/04 ⑥ · 검토 S8). 단추를 누르면 시험 목록을 거치지 않고 바로(검토 B4)
   if (tab === '평가'){ view.innerHTML = head + '<p class="exnote">불러오는 중…</p>';
-    examCount().then(() => sb.rpc('exam_list')).then(({data}) => { view.innerHTML = head + ((data || []).map(s => `<div class="exrow"><div class="top"><div class="grow"><b>${esc(s.name)}</b><div class="exnote">${s.count}문항 · ${s.minutes || '—'}분${(s.tries || []).length ? ` · ${s.tries.length}회 풂 · 최근 ${s.tries[s.tries.length - 1].score}점` : ''}</div></div><a class="btn btn-s" href="#/시험">시험 목록에서 풀기 ›</a></div></div>`).join('') || '<p class="exnote">아직 받은 학원 모의평가가 없습니다.</p>'); }).catch(() => {}); return; }
+    examList().then(data => {
+      const mine = data.filter(s => (s.subjects || []).includes(code));
+      const btn = s => { const n = (s.tries || []).length; return !s.open ? (n ? ['복습', `#/시험/${s.id}/답안지`] : null) : s.started ? ['이어 풀기', `#/시험/${s.id}`] : n ? ['다시 풀기', ''] : ['시작하기', '']; };
+      view.innerHTML = head + (mine.map(s => { const b = btn(s); return `<div class="exrow"><div class="top"><div class="grow"><b>${esc(s.name)}</b><div class="exnote">${s.count}문항 · ${s.minutes || '—'}분${(s.tries || []).length ? ` · ${s.tries.length}회 풂 · 최근 ${s.tries[s.tries.length - 1].score}점` : ''}</div></div>${b ? `<a class="btn btn-s" href="${b[1] || 'javascript:void 0'}" ${b[1] ? '' : `data-go="${esc(s.id)}"`}>${b[0]} ›</a>` : ''}</div></div>`; }).join('') || '<p class="exnote">이 과목의 학원 모의평가는 아직 없습니다.</p>');
+      view.querySelectorAll('[data-go]').forEach(a => a.onclick = () => window.scExamGo(data.find(s => s.id === a.dataset.go)));
+    }).catch(() => {}); return; }
   if (tab === '기출'){
+    // 기출 머리 글은 과목마다(원장 11/04 ⑦). 40분 · 25문항 · 50점은 수능 통합과학만(D-486). 2022 선택과목은 아직 시행된 학평 · 모평 · 수능이 없다
+    if (code !== 'IS1'){ view.innerHTML = head + '<p class="exnote">이 과목은 아직 시행된 시험(학평 · 모평 · 수능)이 없습니다. 시험이 시행되면 여기에 회차별로 생깁니다.</p>'; return; }
     const M = {'학평': {'고1': [3, 6, 9, 11], '고2': [3, 6, 9, 11], '고3': [3, 5, 7, 10]}, '모평': {'고3': [6, 9]}, '수능': {'고3': [11]}};
     const st = Object.assign({e: '학평', g: '고2'}, (() => { try { return JSON.parse(sessionStorage.getItem('sc.gichul') || '{}'); } catch(e){ return {}; } })());
     if (!M[st.e][st.g]) st.g = Object.keys(M[st.e])[0];
@@ -645,7 +688,8 @@ function noteV(tab){
 // 도구: 과목과 상관없는 것 — 개념 카드 · 타이머 · 메모장 · 플래시카드 · 실험 앱(과학 앱 L-115 것을 그대로)
 function toolV(){
   document.body.classList.remove('done'); crumbSet('도구');
-  const T = [['개념 카드', '#/목록/개념', '개념 108장'], ['타이머', SCIENCE_APP, '최과학 과학 앱'], ['메모장', SCIENCE_APP, '최과학 과학 앱'], ['플래시카드', SCIENCE_APP, '9,000장이 넘는 카드'], ['실험 앱', SCIENCE_APP, '중화 반응 · 단진동 등']];
+  // 칸마다 과학 앱의 그 화면으로 바로(원장 11/05 「타이머만 누르면 타이머로 딱 가야지」). 개념 수는 세어서
+  const T = [['개념 카드', '#/목록/개념', `개념 ${Object.keys(C).length}장`], ['타이머', SCIENCE_APP + 'timer/', '최과학 과학 앱'], ['메모장', SCIENCE_APP + 'notes/', '최과학 과학 앱'], ['플래시카드', SCIENCE_APP + 'quiz/', '9,000장이 넘는 카드'], ['실험 앱', SCIENCE_APP, '중화 반응 · 단진동 등']];
   view.innerHTML = `<h1>공부 도구</h1><div class="g6">${T.map(([t, href, s]) => `<a class="ucard" href="${href}" ${href.startsWith('http') ? 'target="_blank" rel="noopener"' : ''}><b>${t}</b><small>${s}</small></a>`).join('')}</div>
     <p class="exnote">문항에 단 메모는 오답노트 「메모」에 모입니다.</p>`;
 }
@@ -671,9 +715,14 @@ function myV(){
   document.getElementById('myOut').onclick = async () => { try { await sb.auth.signOut(); } catch(e){} location.reload(); };
 }
 
+let lastHash = location.hash;
 function route(){
+  // 시험을 보는 중에 다른 곳으로 가면: 멈출 수 있는 시험은 저절로 멈춰 두고, 멈출 수 없는 시험은 한 번 묻는다(검토 L2)
+  if (window.scExamGuard && !window.scExamGuard(location.hash)){ history.replaceState(null, '', lastHash); return; }
+  lastHash = location.hash;
   const h = decodeURIComponent(location.hash.slice(1) || '/');
   const p = h.split('/'), kind = p[1], arg = p[2];
+  document.body.classList.toggle('athome', !kind);
   closePanel();   // 화면이 바뀌면 패널은 닫는다(패널 안 개념 이동은 주소를 바꾸지 않음)
   window.scExamStop(); clearInterval(sesClock);
   // 화면을 그리다 오류가 나면 빈 화면 대신 오류 글을 보인다(원장 11/04 갤럭시에서 빈 화면 — 원인 찾기용)
@@ -683,8 +732,8 @@ function route(){
     else if (kind === '문항') problem(arg);
     else if (kind === '개념') concept(arg);
     else if (kind === '목록') home(arg);
-    else if (kind === '과목') subjectV(arg, p[3], p[4]);
-    else if (kind === '풀기') sessEnd();
+    else if (kind === '과목'){ subjectV(arg, p[3], p[4]); if (arg && !SUBJ[arg]) notice('없는 과목이라 수능 통합과학을 보여 드립니다.'); }
+    else if (kind === '풀기') sessEnd(p[3]);
     else if (kind === '오답노트') noteV(arg);
     else if (kind === '도구') toolV();
     else if (kind === '마이') myV();

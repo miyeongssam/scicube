@@ -163,7 +163,7 @@ async function adminScreen(msg) {
 function startApp(isAdmin) {
   gate.style.display = 'none'; layout.style.display = '';
   const s = document.createElement('script');
-  s.src = 'app.js?v=9';
+  s.src = 'app.js?v=10';
   window.scIsAdmin = isAdmin;
   document.body.appendChild(s);
   const top = document.querySelector('.top .in');
@@ -175,7 +175,7 @@ function startApp(isAdmin) {
   }
   const out = document.createElement('button');
   out.textContent = '로그아웃'; out.className = 'btn btn-s'; out.style.marginLeft = isAdmin ? '8px' : 'auto';
-  out.onclick = async () => { await sb.auth.signOut(); location.reload(); };
+  out.onclick = async () => { if (window.scExamGuard && !window.scExamGuard('#/')) return; await sb.auth.signOut(); location.reload(); };   // 시험 중이면 멈춰 두거나 묻는다(검토 L2)
   top.appendChild(out);
 }
 

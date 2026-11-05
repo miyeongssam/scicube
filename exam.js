@@ -55,7 +55,10 @@
   const e = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const v = () => document.getElementById('view');
   let clock = null, track = null, keys = null;
-  const stopClock = () => { if (clock) clearInterval(clock); if (track) clearInterval(track); if (keys) document.removeEventListener('keydown', keys); clock = track = keys = null; const m = document.getElementById('exM'); if (m) m.remove(); };
+  let live = null;   // 지금 풀고 있는 시험 {id, pause_ok, ans, secs} — 다른 곳으로 갈 때 멈춰 두거나 묻는다(검토 L2)
+  const stopClock = () => { if (clock) clearInterval(clock); if (track) clearInterval(track); if (keys) document.removeEventListener('keydown', keys); clock = track = keys = null; live = null; const m = document.getElementById('exM'); if (m) m.remove(); };
+  const STATUS = { published: '게시됨', draft: '준비 중', closed: '닫힘', retired: '내림' };   // 관리자에게 보이는 상태(원장 11/04 ③)
+  const resetList = () => { if (window.scExamListReset) window.scExamListReset(); };
   const mmss = s => s == null ? '—' : `${Math.floor(s / 60)}분 ${s % 60}초`;
   const day = t => t ? new Date(t).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', weekday: 'short' }) : '';
   const when = t => t ? new Date(t).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
@@ -90,7 +93,7 @@
     if (error) { v().innerHTML = '<p>시험 목록을 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>'; return; }
     const admin = !!window.scIsAdmin;
     const todo = data.filter(s => s.open && (s.started || !(s.tries || []).length)).map(s => `<div class="exrow"><div class="top"><div class="grow"><b>${e(s.name)}</b>
-        <div class="exnote">${s.count}문항${s.minutes ? ' · ' + s.minutes + '분' : ''}${s.closes_at ? ' · ' + when(s.closes_at) + '까지' : ''}${s.pause_ok ? '' : ' · 멈출 수 없는 시험'}${admin ? ' · ' + e(s.status) : ''}</div>
+        <div class="exnote">${s.count}문항${s.minutes ? ' · ' + s.minutes + '분' : ''}${s.closes_at ? ' · ' + when(s.closes_at) + '까지' : ''}${s.pause_ok ? '' : ' · 멈출 수 없는 시험'}${admin ? ' · ' + e(STATUS[s.status] || s.status) : ''}</div>
         ${s.paused ? `<div class="exnote" style="color:var(--primary)">멈춤 · 남은 시간 ${mmss(s.left)}</div>` : ''}</div>
         <a class="btn btn-p" href="#/시험/${e(s.id)}" ${!s.started && !s.pause_ok ? `data-warn="${e(s.id)}" data-min="${s.minutes || ''}" data-cnt="${s.count}"` : ''}>${s.started ? '이어 풀기' : admin && s.status !== 'published' ? '미리 풀기' : '시작하기'}</a></div></div>`).join('');
     const hist = data.flatMap(s => (s.tries || []).map(t => ({ id: s.id, name: s.name, open: s.open, next: (s.tries || []).length + 1, ...t })))
@@ -146,10 +149,11 @@
   }
 
   // 풀기: 한 쪽에 한 문항(원장 11/03 — 25문항을 아래로 끌지 않게). 위 번호표 · ‹ 이전 · 다음 › 으로 넘김
-  async function take(id, retry) {
+  async function take(id, retry, startAt) {
     stopClock();
     v().innerHTML = '<p class="exnote">시험을 여는 중입니다…</p>';
     const { data: x, error } = await sb.rpc('exam_start', { p_set: id, p_retry: !!retry });
+    resetList();
     if (error) { v().innerHTML = '<p>시험을 열지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>'; return; }
     if (x.result !== 'ok') { v().innerHTML = '<p>이 시험은 지금 열려 있지 않습니다.</p><a class="btn btn-s" href="#/시험">시험 목록</a>'; return; }
     if (x.submitted) { location.replace(`#/시험/${id}/답안지`); return; }
@@ -210,7 +214,7 @@
         if (w) w.textContent = '제출하지 못했습니다. 다시 눌러 주세요.'; else alert('제출하지 못했습니다. 다시 눌러 주세요.');
         return;
       }
-      closeAsk();
+      closeAsk(); resetList();
       try { localStorage.removeItem(akey); localStorage.removeItem(skey); } catch (y) {}
       setViewTry(id, x.try); cache = null;
       if (window.scSync.exams) window.scSync.exams();
@@ -234,24 +238,25 @@
       m.querySelectorAll('.left a').forEach(a => a.onclick = () => { closeAsk(); show(+a.dataset.i); });
     }
     document.getElementById('exGo').onclick = ask;
-    // 멈춤(원장 11/03): 문제를 가리고 [나중에 이어 풀기] [그만두기] [계속 풀기]. 원장이 보낸 실전 평가(처음 풀이)에는 단추가 없다
+    // 멈춤(원장 11/03): 문제를 가리고 [계속 풀기] [그만두기] [나중에 이어 풀기]. 원장이 보낸 실전 평가(처음 풀이)에는 단추가 없다
+    // 11/05 아이패드: 창이 떠 있는 동안에도 시계가 흘렀다 → [멈춤]을 누른 그 순간 서버에 멈춤을 적고 시계를 세운다. [계속 풀기]는 그 자리에서 다시 연다
     const pb = document.getElementById('exPause');
-    if (pb) pb.onclick = () => {
+    if (pb) pb.onclick = async () => {
       P.style.visibility = 'hidden';
-      const left = document.getElementById('exT').textContent;
-      modal('시험을 멈출까요?', `<p>남은 시간 <b>${left}</b> · 답한 문항 ${paintBar()} / ${x.items.length}</p>
+      const left = document.getElementById('exT').textContent, n = paintBar(), at = cur;
+      stopClock();
+      const { data: r } = await sb.rpc('exam_pause', { p_set: id, p_answers: ans, p_seconds: secs });
+      resetList();
+      if (!r || r.result !== 'ok') { alert('멈추지 못했습니다. 다시 눌러 주세요.'); return take(id, false, at); }
+      modal('시험을 멈출까요?', `<p>남은 시간 <b>${left}</b> · 답한 문항 ${n} / ${x.items.length}</p>
         <p class="exnote">이어 풀기: 시험 목록에서 [이어 풀기]를 누르면 남은 시간부터 다시 풉니다. 고른 답도 그대로 남습니다.<br>그만두기: 이번 풀이를 지우고 나갑니다.</p>`,
-        [['계속 풀기', () => { P.style.visibility = ''; }],
+        [['계속 풀기', () => take(id, false, at)],
          ['그만두기', () => modal('이번 풀이를 지울까요?', '<p class="exnote">고른 답과 시간이 모두 지워집니다. 다음에 들어오면 처음부터 풉니다.</p>',
-            [['돌아가기', () => { P.style.visibility = ''; }], ['지우고 나가기', async () => {
-              stopClock(); await sb.rpc('exam_quit', { p_set: id });
+            [['돌아가기', () => take(id, false, at)], ['지우고 나가기', async () => {
+              await sb.rpc('exam_quit', { p_set: id }); resetList();
               try { localStorage.removeItem(akey); localStorage.removeItem(skey); } catch (y) {}
               location.hash = '#/시험'; }, true]])],
-         ['나중에 이어 풀기', async () => {
-            stopClock();
-            const { data: r } = await sb.rpc('exam_pause', { p_set: id, p_answers: ans, p_seconds: secs });
-            if (!r || r.result !== 'ok') { alert('멈추지 못했습니다. 다시 눌러 주세요.'); return take(id); }
-            location.hash = '#/시험'; }, true]]);
+         ['나중에 이어 풀기', () => { location.hash = '#/시험'; }, true]]);
     };
     document.getElementById('exTP').onclick = () => show(cur - 1);
     document.getElementById('exTX').onclick = () => show(cur + 1);
@@ -261,7 +266,8 @@
       if (ev.key === 'ArrowRight') show(cur + 1); else if (ev.key === 'ArrowLeft') show(cur - 1);
     };
     document.addEventListener('keydown', keys);
-    show(0);
+    show(startAt || 0);
+    live = { id, pause_ok: x.pause_ok, ans, secs };
     // 문항별 시간: 지금 열린 쪽의 문항에 1초씩
     track = setInterval(() => {
       if (document.hidden || !document.getElementById('exO')) return;
@@ -300,7 +306,9 @@
   const omrHTML = (r, id, cur) => `<div class="sheet">${r.items.map(x => {
       const n = (x.choices || []).length || 5;
       const dots = Array.from({ length: n }, (_, j) => j + 1).map(k => `<span class="dot ${k === x.picked ? (x.ok ? 'ok' : 'bad') : k === x.answer ? 'ans' : ''}">${k}</span>`).join('');
-      return `<a class="srow ${String(x.no) === String(cur) ? 'cur' : ''}" href="#/시험/${e(id)}/답안지/${x.no}"><span class="sn">${x.no}</span><span class="sr ${x.ok ? 'o' : 'x'}">${x.ok ? '○' : '✕'}</span>${dots}</a>`;
+      // 답을 안 쓴 문항은 ✕ 대신 회색 「—」(검토 B2)
+      const mark = x.picked ? `<span class="sr ${x.ok ? 'o' : 'x'}">${x.ok ? '○' : '✕'}</span>` : '<span class="sr" style="color:var(--sub)">—</span>';
+      return `<a class="srow ${String(x.no) === String(cur) ? 'cur' : ''}" href="#/시험/${e(id)}/답안지/${x.no}"><span class="sn">${x.no}</span>${mark}${dots}</a>`;
     }).join('')}</div>
     <div class="legend"><span><span class="dot ok"></span> 내가 고른 답(맞음)</span><span><span class="dot bad"></span> 내가 고른 답(틀림)</span><span><span class="dot ans"></span> 정답</span></div>`;
 
@@ -366,6 +374,42 @@
       if (q.ok && firstBad) location.hash = href(firstBad); else reviewItem(id, no);
     };
   }
+
+  // 시험을 보는 중에 다른 화면으로 갈 때(검토 L2) — app.js route 가 먼저 묻는다. true 면 가도 됨
+  window.scExamGuard = hash => {
+    if (!live) return true;
+    const h = decodeURIComponent(hash || '');
+    if (h === `#/시험/${live.id}` || h === `#/시험/${live.id}/다시`) return true;
+    if (live.pause_ok) {   // 멈출 수 있는 시험: 고른 답 · 시간을 저장하고 멈춰 둔다 → 시험 목록에서 [이어 풀기]
+      sb.rpc('exam_pause', { p_set: live.id, p_answers: live.ans, p_seconds: live.secs }).then(resetList);
+      return true;
+    }
+    return confirm('지금 시험을 보는 중입니다. 이 시험은 멈출 수 없어서 나가도 시간이 계속 흐릅니다.\n그래도 나갈까요?');
+  };
+  window.addEventListener('beforeunload', ev => {
+    if (!live) return;
+    if (live.pause_ok) { sb.rpc('exam_pause', { p_set: live.id, p_answers: live.ans, p_seconds: live.secs }); return; }
+    ev.preventDefault(); ev.returnValue = '';
+  });
+  // 과목 화면 「학원 모의평가」에서 바로 시작(검토 B4) — 시험 목록과 같은 확인 창을 쓴다
+  window.scExamGo = s => {
+    if (!s) return;
+    const n = (s.tries || []).length;
+    if (s.started) { location.hash = `#/시험/${s.id}`; return; }
+    if (n) {
+      modal('처음부터 다시 풀까요?', `<p>${n + 1}회 풀이로 새로 시작합니다.</p><p class="exnote">앞에서 푼 기록과 점수는 그대로 남습니다.</p>`,
+        [['취소', () => {}], ['다시 풀기', () => { location.hash = `#/시험/${s.id}/다시`; }, true]]);
+      return;
+    }
+    if (!s.pause_ok) {
+      modal('시험을 시작할까요?', `<p>${s.count}문항${s.minutes ? ' · ' + s.minutes + '분' : ''}</p>
+        <p><b>이 시험은 한 번 시작하면 멈출 수 없습니다.</b> 시간이 계속 흐르니, 끝까지 풀 수 있을 때 시작하세요.</p>`,
+        [['나중에', () => {}], ['시작하기', () => { location.hash = `#/시험/${s.id}`; }, true]]);
+      return;
+    }
+    location.hash = `#/시험/${s.id}`;
+  };
+  window.scExamLive = () => !!live;
 
   window.scExam = (id, sub, no) => {
     if (!id) return list();

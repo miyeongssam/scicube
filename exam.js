@@ -56,7 +56,7 @@
   const v = () => document.getElementById('view');
   let clock = null, track = null, keys = null;
   let live = null;   // 지금 풀고 있는 시험 {id, pause_ok, ans, secs} — 다른 곳으로 갈 때 멈춰 두거나 묻는다(검토 L2)
-  const stopClock = () => { if (clock) clearInterval(clock); if (track) clearInterval(track); if (keys) document.removeEventListener('keydown', keys); clock = track = keys = null; live = null; const m = document.getElementById('exM'); if (m) m.remove(); };
+  const stopClock = () => { if (window.scWake) window.scWake(false); if (clock) clearInterval(clock); if (track) clearInterval(track); if (keys) document.removeEventListener('keydown', keys); clock = track = keys = null; live = null; const m = document.getElementById('exM'); if (m) m.remove(); };
   const STATUS = { published: '게시됨', draft: '준비 중', closed: '닫힘', retired: '내림' };   // 관리자에게 보이는 상태(원장 11/04 ③)
   const resetList = () => { if (window.scExamListReset) window.scExamListReset(); };
   const mmss = s => s == null ? '—' : `${Math.floor(s / 60)}분 ${s % 60}초`;
@@ -155,12 +155,13 @@
     const { data: x, error } = await sb.rpc('exam_start', { p_set: id, p_retry: !!retry });
     resetList();
     if (error) { v().innerHTML = '<p>시험을 열지 못했습니다. 잠시 뒤 다시 열어 주세요.</p>'; return; }
-    if (x.result !== 'ok') { v().innerHTML = '<p>이 시험은 지금 열려 있지 않습니다.</p><a class="btn btn-s" href="#/시험">시험 목록</a>'; return; }
+    if (x.result !== 'ok') { v().innerHTML = '<p>이 시험은 지금 열려 있지 않습니다.</p>'; return; }
     if (x.submitted) { location.replace(`#/시험/${id}/답안지`); return; }
     if (retry) history.replaceState(null, '', `#/시험/${id}`);
     const fix = await signed(x.items.map(q => q.stem));
     const akey = key(id, x.try), skey = akey + '.s';
     const d = x.draft || {}, ans = Object.assign({}, d.answers || {}, getJ(akey)), secs = Object.assign({}, d.seconds || {}, getJ(skey));
+    const xkey = akey + '.x', strike = getJ(xkey);   // 줄 그은 선지 {문항: [번호…]} — 이 기기에만(원장 11/10 U6)
     let cur = 0;
     v().innerHTML = `<h1>${e(x.name)}${x.try > 1 ? ` <span class="exnote">${x.try}회 풀이</span>` : ''}</h1>
       <div class="exhead"><span class="extime" id="exT"></span><span class="exnote" id="exC"></span>
@@ -180,11 +181,16 @@
       const q = x.items[cur], last = cur === x.items.length - 1;
       P.innerHTML = `<div class="exq"><div class="exno">${q.no}번${q.points ? ` <span class="exnote">${q.points}점</span>` : ''}</div>
           <div class="stem x">${fix(q.stem)}</div>
-          <div class="choices">${(q.choices || []).map((c, k) => `<div class="ch ${ans[q.id] === k + 1 ? 'sel' : ''}" role="button" data-k="${k + 1}"><span class="num">${k + 1}</span><span class="txt">${e(c)}</span></div>`).join('')}</div></div>
+          <div class="choices">${(q.choices || []).map((c, k) => `<div class="ch ${ans[q.id] === k + 1 ? 'sel' : ''} ${(strike[q.id] || []).includes(k + 1) ? 'struck' : ''}" role="button" data-k="${k + 1}"><span class="num">${k + 1}</span><span class="txt">${e(c)}</span></div>`).join('')}</div></div>
         <div class="expg">${cur ? '<button class="btn btn-s" id="exPrev">‹ 이전 문항</button>' : '<span></span>'}
           <span class="exnote">${cur + 1} / ${x.items.length}</span>
           ${last ? '<button class="btn btn-p" id="exGo2">제출하기</button>' : '<button class="btn btn-p" id="exNext">다음 문항 ›</button>'}</div>`;
+      P.querySelectorAll('.ch').forEach(c => window.scUI && window.scUI.longPress(c, () => {   // 길게 누르면 줄 긋기 · 다시 길게 누르면 풀기
+        const k = +c.dataset.k, l = new Set(strike[q.id] || []); l.has(k) ? l.delete(k) : l.add(k); strike[q.id] = [...l]; putJ(xkey, strike);
+        c.classList.toggle('struck', l.has(k));
+      }));
       P.querySelectorAll('.ch').forEach(c => c.onclick = () => {
+        if (window.scUI && window.scUI.lpEat(c)) return;
         const k = +c.dataset.k;
         if (ans[q.id] === k) delete ans[q.id]; else ans[q.id] = k;
         putJ(akey, ans);
@@ -215,7 +221,7 @@
         return;
       }
       closeAsk(); resetList();
-      try { localStorage.removeItem(akey); localStorage.removeItem(skey); } catch (y) {}
+      try { localStorage.removeItem(akey); localStorage.removeItem(skey); localStorage.removeItem(xkey); } catch (y) {}
       setViewTry(id, x.try); cache = null;
       if (window.scSync.exams) window.scSync.exams();
       location.hash = `#/시험/${id}/답안지`;
@@ -268,6 +274,7 @@
     document.addEventListener('keydown', keys);
     show(startAt || 0);
     live = { id, pause_ok: x.pause_ok, ans, secs };
+    if (window.scWake) window.scWake(true);   // 시험 동안 화면이 꺼지지 않게(U5)
     // 문항별 시간: 지금 열린 쪽의 문항에 1초씩
     track = setInterval(() => {
       if (document.hidden || !document.getElementById('exO')) return;
@@ -317,17 +324,16 @@
     stopClock();
     v().innerHTML = '<p class="exnote">답안지를 불러오는 중입니다…</p>';
     const c = await loadReview(id);
-    if (c.bad) { v().innerHTML = '<p>제출한 답안이 없습니다.</p><a class="btn btn-s" href="#/시험">시험 목록</a>'; return; }
+    if (c.bad) { v().innerHTML = '<p>제출한 답안이 없습니다.</p>'; return; }
     const r = c.r;
     if (r.result === 'closed') {
-      v().innerHTML = `<h1>시험 결과</h1><div class="exscore">${r.score}점</div><p>맞힌 문항 ${r.correct} / ${r.count}</p><p class="exnote">이 시험은 닫혀서 문제와 해설은 볼 수 없습니다.</p><a class="btn btn-s" href="#/시험">시험 목록</a>`;
+      v().innerHTML = `<h1>시험 결과</h1><div class="exscore">${r.score}점</div><p>맞힌 문항 ${r.correct} / ${r.count}</p><p class="exnote">이 시험은 닫혀서 문제와 해설은 볼 수 없습니다.</p>`;
       return;
     }
     v().innerHTML = `<div class="omrpage"><div class="excrumb"><a href="#/시험">시험 목록</a> › <b>${e(r.name)}</b> › ${r.try}회 풀이</div>
       <div class="exres"><div class="excard"><div class="sub">${r.try}회 풀이 · ${day(r.at)}</div><div class="exscore">${r.score}점</div>
           <div class="sub">${r.count}문항 중 ${r.correct}문항 맞힘<br>걸린 시간 ${mmss(r.elapsed)}</div>
-          <a class="btn btn-p" href="#/시험/${e(id)}/답안지/${r.items[0].no}" id="exAll">복습하기</a>
-          <a class="btn btn-s" href="#/시험">시험 목록</a></div>
+          <a class="btn btn-p" href="#/시험/${e(id)}/답안지/${r.items[0].no}" id="exAll">복습하기</a></div>
         <div><div class="sub" style="margin-bottom:6px">내 답안지 — 줄을 누르면 그 문항 복습</div>${omrHTML(r, id)}</div></div></div>`;
     document.getElementById('exAll').onclick = () => setWrongOnly(false);
     v().querySelectorAll('.srow').forEach(a => a.addEventListener('click', () => setWrongOnly(false)));

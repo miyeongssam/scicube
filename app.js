@@ -20,6 +20,7 @@ const ICON = {
   ol: sv('<path d="M4 6h1.5v4M4 10h3M4 14.5c.5-1 2.5-1 2.5.3 0 1-2.5 1.7-2.5 3.2h2.7M10 7h10M10 12h10M10 17h10"/>'),
   hi: sv('<path d="M14 4l6 6-8 8H6v-6z"/><path d="M4 21h8"/>'),
   color: sv('<path d="M7 17L12 5l5 12M8.6 13h6.8"/>'),
+  back: sv('<path d="M19 12H5M11 6l-6 6 6 6"/>'),
 };
 // 고른 답(정답 확인 전) — 답안지에 바로 보이도록 따로 남긴다
 function loadPick(){ try { return JSON.parse(localStorage.getItem('sc.pick') || '{}'); } catch(e){ return {}; } }
@@ -29,6 +30,25 @@ function clearRes(id){ window.scSync.cleared(id); const r = loadRes(); delete r[
 // 풀이 기록: 한 번 풀 때마다 한 줄 → 서버로 보낸다(정답률 · 평균 시간은 서버에서 계산)
 function loadAttempts(){ try { return JSON.parse(localStorage.getItem('sc.attempts') || '[]'); } catch(e){ return []; } }
 function logAttempt(a){ const l = loadAttempts(); l.push(Object.assign({id: crypto.randomUUID(), 날짜: new Date().toISOString()}, a)); try { localStorage.setItem('sc.attempts', JSON.stringify(l)); } catch(e){} window.scSync.attempt(); }
+// 마지막 풀이 한 줄에 덧붙이기(틀린 까닭 · 찍어서 맞힘 · 다시 볼 때 — 원장 11/10 U7 · U9 · U10). 서버에도 고쳐 보낸다(sync.js)
+function markLast(id, patch){ const l = loadAttempts(); for (let i = l.length - 1; i >= 0; i--) if (l[i]['문항'] === id){ Object.assign(l[i], patch, {upd: true}); break; }
+  try { localStorage.setItem('sc.attempts', JSON.stringify(l)); } catch(e){} window.scSync.attempt(); }
+function lastAttempt(id){ const l = loadAttempts(); for (let i = l.length - 1; i >= 0; i--) if (l[i]['문항'] === id) return l[i]; return null; }
+// 길게 누르기(손가락 · 펜 0.5초) — 선지에 줄 긋기(소거법, U6). 길게 누른 뒤의 「누름」은 고르기로 치지 않는다
+function longPress(el, fn){
+  let t = null, x0 = 0, y0 = 0;
+  const off = () => { clearTimeout(t); t = null; };
+  el.addEventListener('pointerdown', e => { x0 = e.clientX; y0 = e.clientY; off(); t = setTimeout(() => { t = null; el.dataset.lp = '1'; fn(); }, 500); });
+  el.addEventListener('pointermove', e => { if (t && Math.hypot(e.clientX - x0, e.clientY - y0) > 10) off(); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(k => el.addEventListener(k, off));
+  el.addEventListener('contextmenu', e => e.preventDefault());
+}
+function lpEat(el){ if (el.dataset.lp){ delete el.dataset.lp; return true; } return false; }
+// 시험 · 시간 잰 풀기 동안 화면이 꺼지지 않게(U5)
+let wakeL = null, wakeWant = false;
+async function wake(on){ wakeWant = on; try { if (on && !wakeL && navigator.wakeLock){ wakeL = await navigator.wakeLock.request('screen'); wakeL.addEventListener('release', () => { wakeL = null; }); } else if (!on && wakeL){ const w = wakeL; wakeL = null; await w.release(); } } catch(e){} }
+document.addEventListener('visibilitychange', () => { if (wakeWant && document.visibilityState === 'visible') wake(true); });
+window.scWake = wake;
 function loadRes(){ try { return JSON.parse(localStorage.getItem('sc.res') || '{}'); } catch(e){ return {}; } }
 function saveRes(id, v){ const r = loadRes(); r[id] = v; try { localStorage.setItem('sc.res', JSON.stringify(r)); } catch(e){} }
 
@@ -147,12 +167,13 @@ function problem(id){
   // 받은 시험(아직 안 낸 것)에 든 문항은 시험을 낸 뒤에 연습으로 연다 — 정답이 미리 보이지 않게(검토 L1)
   if (lockedIds().has(id)){
     document.body.classList.remove('done'); crumbSet(inS ? S.title : UNAME(keyOf(q)));
-    view.innerHTML = `${inS ? sessBar(S, id) : `<div class="bar1"><h1>${esc(UNAME(keyOf(q)))}</h1><div class="nav"><a class="btn btn-s" href="#/과목/${subj}">단원 목록</a></div></div>`}
+    view.innerHTML = `${inS ? sessBar(S, id) : `<div class="bar1"><h1>${esc(UNAME(keyOf(q)))}</h1></div>`}
       <div class="card" style="margin-top:16px"><b>받은 시험에 들어 있는 문항입니다</b><div class="sub">시험을 낸 뒤에 여기서 풀 수 있어요. <a href="#/시험">시험 목록</a></div></div>
       <div class="check" style="justify-content:space-between;margin-top:24px">${prev ? `<a class="btn btn-s" href="#/문항/${prev.id}">‹ 이전 문제</a>` : '<span></span>'}${next ? `<a class="btn btn-s" href="#/문항/${next.id}">다음 문제 ›</a>` : inS ? `<a class="btn btn-p" href="#/풀기/끝">끝내기 ›</a>` : '<span></span>'}</div>`;
     if (inS) wireSess(S);
     return;
   }
+  try { localStorage.setItem('sc.last', id); } catch(e){}
   const saved = loadRes()[id];
   let sel = saved ? saved.sel : 0;
   let t0 = Date.now();   // 나의 풀이 시간: 문제를 연 때부터 「정답 확인」까지 — [다시 풀기]를 누르면 다시 잰다(검토 L5)
@@ -160,8 +181,7 @@ function problem(id){
   const rel = q['관련'].map(r => `<a class="lk" href="#/개념/${esc(r['카드'])}">${esc(r['말'])}</a>`).join(' · ');
   view.innerHTML = `
     ${inS ? sessBar(S, id) : `<div class="bar1"><h1>${esc(UNAME(keyOf(q)))}</h1>
-      <div class="nav"><a class="btn btn-s" href="#/과목/${subj}">단원 목록</a>
-        <a class="ic" ${prev ? `href="#/문항/${prev.id}"` : 'style="color:var(--line)"'}>‹</a><span>${i + 1} / ${L.length}</span>
+      <div class="nav"><a class="ic" ${prev ? `href="#/문항/${prev.id}"` : 'style="color:var(--line)"'}>‹</a><span>${i + 1} / ${L.length}</span>
         <a class="ic" ${next ? `href="#/문항/${next.id}"` : 'style="color:var(--line)"'}>›</a></div></div>`}
     <div class="bar2"><span class="qno">${esc(q['출처'])}</span><span class="badge">${esc(q['자료유형'])}</span>${q['배점'] ? `<span class="sub">${esc(q['배점'])}점</span>` : ''}
       <span style="flex:1"></span>
@@ -176,7 +196,7 @@ function problem(id){
       ${tailHTML(id)}
       <div class="check" style="justify-content:space-between;margin-top:32px">
         ${prev ? `<a class="btn btn-s" href="#/문항/${prev.id}">‹ 이전 문제</a>` : '<span></span>'}
-        ${next ? `<a class="btn btn-s" href="#/문항/${next.id}">다음 문제 ›</a>` : inS ? `<a class="btn btn-p" href="#/풀기/끝">끝내기 ›</a>` : `<a class="btn btn-s" href="#/과목/${subj}">단원 목록</a>`}</div>
+        ${next ? `<a class="btn btn-s" href="#/문항/${next.id}">다음 문제 ›</a>` : inS ? `<a class="btn btn-p" href="#/풀기/끝">끝내기 ›</a>` : '<span></span>'}</div>
     </div>`;
   wireJump(view);
   const chs = [...view.querySelectorAll('.ch')], check = document.getElementById('check');
@@ -210,15 +230,23 @@ function problem(id){
     chs.forEach(b => {
       const k = +b.dataset.k;
       const cx = b.querySelector('.cx'), v = out[k] || ''; cx.className = 'oxb cx ' + v; cx.textContent = v === 'x' ? '✕' : v === 'o' ? '○' : '';
-      b.classList.toggle('sel', k === sel);
+      b.classList.toggle('sel', k === sel); b.classList.toggle('struck', v === 'x');
       b.classList.toggle('correct', done && k === q['정답']);
       b.classList.toggle('mywrong', done && k === sel && sel !== q['정답']);
     });
     if (done){
       const ok = sel === q['정답'];
       document.getElementById('result').className = 'result ' + (ok ? 'ok' : 'bad');
+      const la = lastAttempt(id) || {};
+      const chip = (attr, val, on) => `<button class="chip ${on ? 'on' : ''}" data-${attr}="${val}">${val === '1' ? '찍어서 맞힘' : val}</button>`;
       document.getElementById('result').innerHTML = (ok ? '정답입니다.' : '오답입니다.') +
-        (ok && outCorrect ? '<span class="tag" title="처음에 오답이라고 지웠던 선지가 정답이었습니다">지웠던 선지 → 정답</span>' : '');
+        (ok && outCorrect ? '<span class="tag" title="처음에 오답이라고 지웠던 선지가 정답이었습니다">지웠던 선지 → 정답</span>' : '') +
+        (ok ? `<div class="why">${chip('guess', '1', la['찍음'])}<span class="sub">다시 볼 때</span>${['쉬움', '보통', '어려움'].map(w => chip('ease', w, la['쉬움'] === w)).join('')}</div>`
+            : `<div class="why"><span class="sub">왜 틀렸나요?</span>${['개념 몰랐음', '실수', '시간 부족'].map(w => chip('why', w, la['까닭'] === w)).join('')}</div>`);
+      document.querySelectorAll('#result [data-why]').forEach(b => b.onclick = () => { markLast(id, {까닭: la['까닭'] === b.dataset.why ? '' : b.dataset.why}); paint(); });
+      document.querySelectorAll('#result [data-ease]').forEach(b => b.onclick = () => { markLast(id, {쉬움: la['쉬움'] === b.dataset.ease ? '' : b.dataset.ease}); paint(); });
+      document.querySelectorAll('#result [data-guess]').forEach(b => b.onclick = () => { const on = !la['찍음']; markLast(id, {찍음: on});
+        const u = loadSet('sc.unsure'); on ? u.add(id) : u.delete(id); saveSet('sc.unsure', u); const ub = document.getElementById('unsureBtn'); if (ub) ub.classList.toggle('on', on); paint(); });
       const mine = loadAttempts().filter(a => a['문항'] === id), last = loadRes()[id] || {};
       document.getElementById('stat').innerHTML = statInner(id, last.secs, mine.length);
       fillStats(id);
@@ -231,7 +259,13 @@ function problem(id){
         logAttempt({문항: id, 고른답: sel, 정답: q['정답'], 맞음: sel === q['정답'], 초: secs, 보기표시: bogi, 선지표시: out, 지운정답: outCorrect}); paint(); };
     }
   }
+  chs.forEach(b => longPress(b, () => {   // 길게 누르면 선지에 줄(왼쪽 ✕ 칸과 같은 표시) — 다시 길게 누르면 풀림
+    if (document.body.classList.contains('done')) return;
+    const k = +b.dataset.k; if (out[k] === 'x') delete out[k]; else { out[k] = 'x'; if (k === q['정답']) outCorrect = true; }
+    savePick(id, {sel, bogi, out}); paint();
+  }));
   chs.forEach(b => b.onclick = e => {
+    if (lpEat(b)) return;
     if (document.body.classList.contains('done')) return;
     const k = +b.dataset.k;
     if (e.target.closest('.cx')){   // ○ ↔ ✕ (처음 ○)
@@ -249,7 +283,7 @@ function problem(id){
 function concept(name){
   const c = C[name]; if (!c) return home('개념');
   document.body.classList.remove('done');
-  view.innerHTML = `<div class="bar1"><span></span><div class="nav"><button class="btn btn-s" onclick="history.back()">‹ 뒤로</button><a class="btn btn-s" href="#/목록/개념">개념 목록</a></div></div>` + conceptHTML(c);
+  view.innerHTML = conceptHTML(c);
 }
 
 // 오른쪽 패널: 문제를 보면서 파란 낱말을 누르면 개념 카드를 옆에 연다(패널 안에서도 계속 이동)
@@ -281,7 +315,7 @@ function wirePanel(){
 }
 function showConcept(){
   const name = stack[stack.length - 1], c = C[name]; if (!c) return;
-  panel.innerHTML = panelHead('개념') + `<div class="ph">${stack.length > 1 ? '<button class="btn btn-s" id="pb">‹ 뒤로</button>' : ''}<span class="sp"></span>
+  panel.innerHTML = panelHead('개념') + `<div class="ph">${stack.length > 1 ? `<button class="ibtn" id="pb" title="뒤로" aria-label="뒤로">${ICON.back}</button>` : ''}<span class="sp"></span>
     <a class="btn btn-s" href="#/개념/${esc(name)}">크게 보기</a></div>` + conceptHTML(c, true);
   wirePanel();
   const pb = document.getElementById('pb');
@@ -451,19 +485,24 @@ const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '—';
 function loadExamAtt(){ try { return JSON.parse(localStorage.getItem('sc.examAtt') || '[]'); } catch(e){ return []; } }
 function solveLog(){
   const h = {};
-  loadAttempts().forEach(a => (h[a['문항']] = h[a['문항']] || []).push({ok: !!a['맞음'], at: a['날짜']}));
+  loadAttempts().forEach(a => (h[a['문항']] = h[a['문항']] || []).push({ok: !!a['맞음'], at: a['날짜'], why: a['까닭'] || '', guess: !!a['찍음'], ease: a['쉬움'] || ''}));
   loadExamAtt().forEach(a => (h[a.q] = h[a.q] || []).push({ok: !!a.ok, at: a.at}));
   Object.values(h).forEach(l => l.sort((x, y) => String(x.at).localeCompare(String(y.at))));
   return h;
 }
 // 오답노트: 한 번이라도 틀렸고, 마지막 두 번을 연달아 맞히지 않은 문항(두 번 연달아 맞히면 저절로 빠짐 — D-489)
 function wrongIds(h){ return Object.keys(h).filter(id => byId[id] && h[id].some(x => !x.ok) && !(h[id].length >= 2 && h[id].slice(-2).every(x => x.ok))); }
+// 다시 볼 날(U9 · 원장 11/10): 틀림 · 찍어서 맞힘 = 다음 날, 맞힘 + 「다시 볼 때」 쉬움 7일 · 보통 3일 · 어려움 1일. 그 날이 되면 오늘의 문항에 먼저 나온다
+const EASE_DAYS = {'쉬움': 7, '보통': 3, '어려움': 1};
+function dueDay(l){ const x = l && l[l.length - 1]; if (!x) return null; const d = !x.ok || x.guess ? 1 : EASE_DAYS[x.ease]; if (!d) return null;
+  const t = new Date(x.at); t.setDate(t.getDate() + d); return t.toLocaleDateString('sv-SE'); }
+function isDue(h, id){ const d = dueDay(h[id]); return !!d && d <= today(); }
 function memoIds(){ return Q.filter(q => { try { return (localStorage.getItem('sc.memo.' + q.id) || '').replace(/<[^>]+>/g, '').trim(); } catch(e){ return false; } }).map(q => q.id); }
 
 // 풀기 엔진 하나 — 범위(소단원 열쇠) × 어떤 문항 × 몇 문항 × 섞기. 단원별 풀기 · 오답노트 · 오늘의 10문항이 모두 이것을 쓴다
 function pickIds({keys, ids, kind, n, shuffle}){
   const h = solveLog(), wrong = new Set(wrongIds(h)), un = loadSet('sc.unsure'), bm = loadSet('sc.bm');
-  const F = {'전체': () => true, '안 푼 것': q => !h[q.id], '틀린 것': q => wrong.has(q.id), '헷갈림 · 북마크': q => un.has(q.id) || bm.has(q.id)};
+  const F = {'전체': () => true, '안 푼 것': q => !h[q.id], '틀린 것': q => wrong.has(q.id), '헷갈림 · 북마크': q => un.has(q.id) || bm.has(q.id), '다시 볼 날': q => isDue(h, q.id)};
   const lock = lockedIds();   // 받은 시험(아직 안 낸 것)의 문항은 연습 묶음에서 뺀다(검토 L1)
   let list = (ids ? ids.map(i => byId[i]).filter(Boolean) : keys ? qsOfKeys(keys) : Q).filter(q => !lock.has(q.id)).filter(F[kind] || F['전체']);
   if (shuffle) list = list.map(q => [Math.random(), q]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
@@ -476,7 +515,7 @@ function sess(){ try { return JSON.parse(localStorage.getItem(SKEY2)); } catch(e
 function saveSess(s){ try { s ? localStorage.setItem(SKEY2, JSON.stringify(s)) : localStorage.removeItem(SKEY2); } catch(e){} }
 function startSess(title, ids, timer, keep){
   if (!ids.length) return alert('고른 조건에 맞는 문항이 없습니다.');
-  if (!keep) ids.forEach(id => { if (loadRes()[id]) clearRes(id); });
+  if (!keep){ ids.forEach(id => { if (loadRes()[id]) clearRes(id); }); const p = loadPick(); ids.forEach(id => delete p[id]); try { localStorage.setItem('sc.pick', JSON.stringify(p)); } catch(e){} }   // K3: 옛 「고른 답」도 지움
   saveSess({title, ids, t0: Date.now(), mins: timer ? Math.max(1, Math.round(ids.length * 40 / 25)) : 0, paused: 0, pAt: null, day: today()});
   const first = keep ? ids.find(id => !loadRes()[id]) || ids[0] : ids[0];
   location.hash = '#/문항/' + first;
@@ -495,7 +534,7 @@ function wireSess(S){
   const T = document.getElementById('sesT'); if (!T) return;
   const tick = () => { const s = sesLeft(S); T.textContent = s > 0 ? `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : '시간 끝'; T.classList.toggle('low', s <= 60);
     if (s <= 0 && !S.pAt){ clearInterval(sesClock); location.hash = '#/풀기/끝/시간'; } };   // 시간이 다 되면 결과로(검토 L4)
-  tick(); sesClock = setInterval(tick, 1000);
+  tick(); sesClock = setInterval(tick, 1000); wake(true);
   document.getElementById('sesP').onclick = () => {
     const s2 = sess(); if (s2.pAt){ s2.paused += Date.now() - s2.pAt; s2.pAt = null; } else s2.pAt = Date.now();
     saveSess(s2); problem(decodeURIComponent(location.hash).slice('#/문항/'.length));
@@ -507,11 +546,11 @@ function sessEnd(why){
   // 안 푼 문항이 있으면 한 번 묻는다(검토 B5 · 원장 11/05 아이패드). 시간이 다 돼서 온 때는 묻지 않음
   if (why !== '시간' && done.length < S.ids.length && !confirm(`${S.ids.length - done.length}문항을 아직 안 풀었어요. 끝낼까요?`)){ history.back(); return; }
   saveSess(null);   // 끝낸 묶음은 지운다 — 그 문항을 다시 열어도 묶음 바 · 타이머가 다시 뜨지 않게(검토 L3)
-  view.innerHTML = `<div class="excrumb"><a href="#/">홈</a> › ${esc(S.title)}</div><h1>${esc(S.title)} — 결과</h1>
+  view.innerHTML = `<h1>${esc(S.title)} — 결과</h1>
     <div class="cards3"><div class="card"><div class="sub">맞힌 문항</div><div class="exscore">${ok.length} / ${S.ids.length}</div></div>
       <div class="card"><div class="sub">푼 문항</div><div class="exscore">${done.length}</div></div><div class="card"><div class="sub">틀린 문항</div><div class="exscore" style="color:var(--danger)">${bad.length}</div></div></div>
     <div class="check" style="justify-content:flex-start;gap:8px;flex-wrap:wrap">
-      ${bad.length ? '<button class="btn btn-p" id="seBad">틀린 것만 다시 풀기</button>' : ''}<a class="btn btn-s" href="#/오답노트">오답노트</a><a class="btn btn-s" href="#/">홈</a></div>
+      ${bad.length ? '<button class="btn btn-p" id="seBad">틀린 것만 다시 풀기</button>' : ''}<a class="btn btn-s" href="#/오답노트">오답노트</a></div>
     <h2 class="exh2">문항</h2>${qRows(S.ids)}`;
   const b = document.getElementById('seBad'); if (b) b.onclick = () => startSess(S.title + ' · 틀린 것', bad, !!S.mins);
 }
@@ -531,7 +570,10 @@ function todayPack(){
   const set = todaySet();
   if (!t || t.day !== today() || t.n !== set.n){
     const seen = new Set(), ids = [];
-    ['틀린 것', '헷갈림 · 북마크', '안 푼 것', '전체'].forEach(kind => pickIds({kind, shuffle: true}).forEach(id => { if (ids.length < set.n && !seen.has(id)){ seen.add(id); ids.push(id); } }));
+    const add = (kind, cap) => pickIds({kind, shuffle: true}).forEach(id => { if (ids.length < cap && !seen.has(id)){ seen.add(id); ids.push(id); } });
+    add('다시 볼 날', Math.round(set.n * 0.4));   // 다시 볼 날이 된 문항 먼저(10문항이면 4 — 원장 11/06)
+    add('안 푼 것', set.n);                          // 나머지는 안 푼 것(6)
+    ['다시 볼 날', '틀린 것', '헷갈림 · 북마크', '전체'].forEach(k => add(k, set.n));   // 모자라면 채움
     t = {day: today(), n: set.n, ids, started: false};
     try { localStorage.setItem('sc.today', JSON.stringify(t)); } catch(e){}
   }
@@ -566,7 +608,7 @@ async function examList(force){
 window.scExamListReset = () => { examCache = null; };
 function lockedIds(){ try { return new Set(JSON.parse(localStorage.getItem('sc.lock') || '[]')); } catch(e){ return new Set(); } }
 async function examCount(){
-  try { return (await examList()).filter(s => s.open && (s.started || !(s.tries || []).length)); } catch(e){ return []; }
+  try { return (await examList()).filter(s => s.open && !(s.tries || []).length); } catch(e){ return []; }   // K5: 받은 시험 = 아직 한 번도 안 낸 것만
 }
 function crumbSet(t){ const c = document.querySelector('.top .crumb'); if (c) c.textContent = t; }
 
@@ -640,16 +682,17 @@ function unitPick(S0, head, arg){
   if (arg != null && arg !== '') st.m = +arg;
   const M = S0.majors[st.m] || S0.majors[0];
   const h = solveLog(), save = () => { try { sessionStorage.setItem(PK, JSON.stringify(st)); } catch(e){} };
-  const stat = keys => { const qs = qsOfKeys(keys); let a = 0, c = 0; qs.forEach(q => (h[q.id] || []).forEach(x => { a++; if (x.ok) c++; })); return {n: qs.length, rate: pct(c, a)}; };
+  const wset = new Set(wrongIds(h));
+  const stat = keys => { const qs = qsOfKeys(keys); return {n: qs.length, done: qs.filter(q => h[q.id]).length, bad: qs.filter(q => wset.has(q.id)).length}; };
   const mySubs = M.mids.flatMap(d => d.subs).map(s => s.key);
   const keys = st.keys.filter(k => mySubs.includes(k));
   const counts = ['전체', '안 푼 것', '틀린 것', '헷갈림 · 북마크'].map(k => [k, pickIds({keys, kind: k, n: '전부'}).length]);
   const got = pickIds({keys, kind: st.kind, n: st.n});
   let no = 0;
   view.innerHTML = head + `<div class="col3">
-    <div class="c1">${S0.majors.map((m, i) => { const sm = stat(m.mids.flatMap(d => d.subs.map(s => s.key))); return `<a href="javascript:void 0" data-m="${i}" class="mrow ${i === st.m ? 'on' : ''} ${sm.n ? '' : 'muted'}">${esc(m.name)}<small>${sm.n ? sm.n + '문항' : '준비 중'}</small></a>`; }).join('')}</div>
+    <div class="c1">${S0.majors.map((m, i) => { const sm = stat(m.mids.flatMap(d => d.subs.map(s => s.key))); return `<a href="javascript:void 0" data-m="${i}" class="mrow ${i === st.m ? 'on' : ''} ${sm.n ? '' : 'muted'}">${esc(m.name)}<small>${sm.n ? `총 ${sm.n} · 푼 ${sm.done}` : '준비 중'}</small></a>`; }).join('')}</div>
     <div class="c2"><div class="sub" style="display:flex;justify-content:space-between"><span>소단원</span><a href="javascript:void 0" id="upAll">전체 선택</a></div>
-      ${M.mids.map(d => `<div class="mid">${esc(d.name)}</div>` + d.subs.map(s => { no++; const sm = stat([s.key]); return `<label class="srow2 ${sm.n ? '' : 'muted'}"><input type="checkbox" data-k="${esc(s.key)}" ${keys.includes(s.key) ? 'checked' : ''} ${sm.n ? '' : 'disabled'}><span class="sn2">${no}</span><span class="st2">${esc(s.name)}</span><small>${sm.n ? `${sm.n}문항 · ${sm.rate}` : '준비 중'}</small></label>`; }).join('')).join('')}</div>
+      ${M.mids.map(d => `<div class="mid">${esc(d.name)}</div>` + d.subs.map(s => { no++; const sm = stat([s.key]); return `<label class="srow2 ${sm.n ? '' : 'muted'}"><input type="checkbox" data-k="${esc(s.key)}" ${keys.includes(s.key) ? 'checked' : ''} ${sm.n ? '' : 'disabled'}><span class="sn2">${no}</span><span class="st2">${esc(s.name)}</span><small>${sm.n ? `총 ${sm.n} · 푼 ${sm.done} · 오답 ${sm.bad}` : '준비 중'}</small></label>`; }).join('')).join('')}</div>
     <div class="c3"><div class="sub">어떤 문항</div>
       ${counts.map(([k, c]) => `<label class="opt"><input type="radio" name="kind" value="${k}" ${k === st.kind ? 'checked' : ''}> ${k} <small>${keys.length ? c : ''}</small></label>`).join('')}
       <div class="sub" style="margin-top:12px">문항 수</div><span class="exseg">${['10', '20', '25', '30', '전부'].map(x => `<a href="javascript:void 0" data-n="${x}" class="${x === st.n ? 'on' : ''}">${x}</a>`).join('')}</span>
@@ -681,7 +724,7 @@ function noteV(tab){
       <button class="btn btn-p" id="nGo" ${ids.length ? '' : 'disabled'}>${tab} ${ids.length}문항 섞어 풀기</button>
       <label class="opt" style="margin:0"><input type="checkbox" id="nTm"> 타이머</label></div>
     ${tab === '틀림' ? '<p class="exnote">틀린 문항은 두 번 연달아 맞히면 저절로 빠집니다.</p>' : ''}
-    ${ids.length ? qRows(ids, tab === '틀림' ? id => { const l = h[id] || []; return `틀림 ${l.filter(x => !x.ok).length}번 · 최근 ${l.slice(-3).map(x => x.ok ? '○' : '✕').join('')}`; } : null) : '<p class="exnote">아직 없습니다.</p>'}`;
+    ${ids.length ? qRows(ids, tab === '틀림' ? id => { const l = h[id] || []; const w = [...l].reverse().find(x => x.why); return `틀림 ${l.filter(x => !x.ok).length}번 · 최근 ${l.slice(-3).map(x => x.ok ? '○' : '✕').join('')}${w ? ' · ' + w.why : ''}`; } : null) : '<p class="exnote">아직 없습니다.</p>'}`;
   document.getElementById('nGo').onclick = () => startSess(`오답노트 · ${tab}`, pickIds({ids, n: '전부', shuffle: true}), document.getElementById('nTm').checked);
 }
 
@@ -703,7 +746,7 @@ function myV(){
     <h2 class="exh2">오늘의 문항</h2>
     <label class="opt"><input type="checkbox" id="myOn" ${set.on ? 'checked' : ''}> 홈에 오늘의 문항 보이기</label>
     <div class="sub" style="margin-top:8px">하루 문항 수</div><span class="exseg">${[5, 10, 20].map(n => `<a href="javascript:void 0" data-tn="${n}" class="${n === set.n ? 'on' : ''}">${n}</a>`).join('')}</span>
-    <p class="exnote">틀린 것 → 헷갈림 · 북마크 → 안 푼 것 차례로 골라 줍니다.</p>
+    <p class="exnote">다시 볼 날이 된 문항(틀림 · 찍어서 맞힘은 다음 날, 맞힌 문항은 「다시 볼 때」 쉬움 7일 · 보통 3일 · 어려움 1일 뒤)을 먼저, 나머지는 안 푼 문항으로 골라 줍니다.</p>
     <h2 class="exh2">단원별 정답률</h2>${rows ? `<table class="extab"><thead><tr><th>과목</th><th>소단원</th><th>푼 횟수</th><th>정답률</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="exnote">아직 푼 문항이 없습니다.</p>'}
     <h2 class="exh2">앱으로 설치</h2><p class="exnote">휴대폰 · 아이패드 홈 화면이나 컴퓨터 바탕 화면에 사이큐브를 앱으로 깔 수 있어요.</p>
     <button class="btn btn-p" id="myInst">📲 앱 설치 방법</button>
@@ -715,8 +758,35 @@ function myV(){
   document.getElementById('myOut').onclick = async () => { try { await sb.auth.signOut(); } catch(e){} location.reload(); };
 }
 
+// 키보드(아이패드 · 갤럭시 키보드 · PC): ← → 이전 · 다음 문항, 1~5 선지 고르기, Enter 정답 확인 → 한 번 더 Enter 다음 문항 (원장 11/10 U1 · U3)
+function navLink(next){ const a = [...view.querySelectorAll('.bar1 .nav a.ic')].find(x => x.textContent.trim() === (next ? '›' : '‹')); return a && a.getAttribute('href') ? a : null; }
+document.addEventListener('keydown', ev => {
+  if (ev.defaultPrevented || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+  const t = ev.target || {}; if (/INPUT|TEXTAREA|SELECT/.test(t.tagName || '') || t.isContentEditable || document.getElementById('exM')) return;
+  if (ev.key === 'Enter' && /^(BUTTON|A)$/.test(t.tagName || '')) return;   // 단추에 커서가 있으면 그 단추가 눌림
+  if (document.getElementById('exO')){   // 시험 푸는 중: ← → 는 exam.js, 1~5 · Enter 는 여기서
+    if (/^[1-5]$/.test(ev.key)){ const c = document.querySelector(`#exP .ch[data-k="${ev.key}"]`); if (c){ c.click(); ev.preventDefault(); } }
+    else if (ev.key === 'Enter'){ const n = document.getElementById('exNext'); if (n){ n.click(); ev.preventDefault(); } }
+    return;
+  }
+  const done = document.body.classList.contains('done');
+  if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight'){ const a = navLink(ev.key === 'ArrowRight'); if (a){ location.hash = a.getAttribute('href'); ev.preventDefault(); } return; }
+  if (/^[1-5]$/.test(ev.key) && !done){ const c = view.querySelector(`.choices .ch[data-k="${ev.key}"]`); if (c){ c.click(); ev.preventDefault(); } return; }
+  if (ev.key === 'Enter'){ const go = document.getElementById('go'); if (go && !go.disabled){ go.click(); ev.preventDefault(); return; }
+    if (done){ const a = navLink(true); if (a){ location.hash = a.getAttribute('href'); ev.preventDefault(); } } }
+});
+// 화면을 좌우로 밀면 이전 · 다음 문항(키보드 없는 태블릿 · U4). 메모 · 패널 · 표 · 번호표 · 그림 위에서는 움직이지 않는다
+let swX = 0, swY = 0, swT = 0, swOk = false;
+document.addEventListener('touchstart', e => { const p = e.touches[0]; swOk = e.touches.length === 1 && !e.target.closest('.panel, [contenteditable="true"], textarea, input, table, .exomr, .pal, .fig');
+  swX = p.clientX; swY = p.clientY; swT = Date.now(); }, {passive: true});
+document.addEventListener('touchend', e => { if (!swOk) return; const p = e.changedTouches[0], dx = p.clientX - swX, dy = p.clientY - swY;
+  if (Date.now() - swT < 700 && Math.abs(dx) > 70 && Math.abs(dy) < 50 && !String(getSelection())) document.dispatchEvent(new KeyboardEvent('keydown', {key: dx < 0 ? 'ArrowRight' : 'ArrowLeft', bubbles: true})); }, {passive: true});
+let firstRoute = true;
 let lastHash = location.hash;
 function route(){
+  // 앱을 처음 열면 마지막에 풀던 문항부터(U8) — 홈 주소로 열었을 때만. 시험은 시험 목록의 [이어 풀기]
+  if (firstRoute){ firstRoute = false; const h0 = decodeURIComponent(location.hash.slice(1) || '/'); let last = null; try { last = localStorage.getItem('sc.last'); } catch(e){}
+    if ((h0 === '/' || h0 === '') && last && byId[last]){ location.replace('#/문항/' + last); return; } }
   // 시험을 보는 중에 다른 곳으로 가면: 멈출 수 있는 시험은 저절로 멈춰 두고, 멈출 수 없는 시험은 한 번 묻는다(검토 L2)
   if (window.scExamGuard && !window.scExamGuard(location.hash)){ history.replaceState(null, '', lastHash); return; }
   lastHash = location.hash;
@@ -724,7 +794,7 @@ function route(){
   const p = h.split('/'), kind = p[1], arg = p[2];
   document.body.classList.toggle('athome', !kind);
   closePanel();   // 화면이 바뀌면 패널은 닫는다(패널 안 개념 이동은 주소를 바꾸지 않음)
-  window.scExamStop(); clearInterval(sesClock);
+  window.scExamStop(); clearInterval(sesClock); wake(false);
   // 화면을 그리다 오류가 나면 빈 화면 대신 오류 글을 보인다(원장 11/04 갤럭시에서 빈 화면 — 원인 찾기용)
   try {
     sideNav();
@@ -744,7 +814,7 @@ function route(){
   window.scrollTo(0, 0);
   examCount().then(l => { const b = document.getElementById('sideExam'); if (b) b.textContent = l.length || ''; });
 }
-window.scUI = { ICON, loadSet, saveSet, openMemo, openComm, openAI, solHTML, wireJump, relHTML,
+window.scUI = { ICON, longPress, lpEat, loadSet, saveSet, openMemo, openComm, openAI, solHTML, wireJump, relHTML,
   toolsHTML, resultHTML, statInner, fillStats, tailHTML, wireItem, loadAttempts, esc, UNAME,
   panelOpen: (tab, html) => { panel.innerHTML = panelHead(tab) + html; wirePanel(); } };
 window.addEventListener('hashchange', route);

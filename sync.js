@@ -17,16 +17,21 @@ window.scSync = (function () {
 
   const row = a => ({
     user_id: uid, question_id: a['문항'], picked: a['고른답'], correct: !!a['맞음'], seconds: a['초'],
-    marks: { bogi: a['보기표시'] || {}, out: a['선지표시'] || {}, outCorrect: !!a['지운정답'] },
+    marks: { bogi: a['보기표시'] || {}, out: a['선지표시'] || {}, outCorrect: !!a['지운정답'], why: a['까닭'] || '', guess: !!a['찍음'], ease: a['쉬움'] || '' },
     client_id: a.id, solved_at: a['날짜'] });
 
   async function sendAttempts() {
     const list = get('sc.attempts', []), todo = list.filter(a => !a.sent && a.id);
+    // 이미 보낸 줄에 틀린 까닭 · 찍어서 맞힘 · 다시 볼 때를 나중에 단 것 → 그 줄의 marks 만 고친다(원장 11/10)
+    for (const a of list.filter(a => a.sent && a.upd && a.id)) {
+      const { error: ue } = await sb.from('attempts').update({ marks: row(a).marks }).eq('user_id', uid).eq('client_id', a.id);
+      if (!ue) { const f = get('sc.attempts', []), x = f.find(y => y.id === a.id); if (x) { delete x.upd; put('sc.attempts', f); } }
+    }
     if (!todo.length) return;
     const { error } = await sb.from('attempts').upsert(todo.map(row), { onConflict: 'user_id,client_id', ignoreDuplicates: true });
     if (error) return;
     const fresh = get('sc.attempts', []);
-    todo.forEach(t => { const f = fresh.find(a => a.id === t.id); if (f) f.sent = true; });
+    todo.forEach(t => { const f = fresh.find(a => a.id === t.id); if (f) { f.sent = true; delete f.upd; } });
     put('sc.attempts', fresh);
   }
 
@@ -54,7 +59,8 @@ window.scSync = (function () {
     const practice = rows.filter(r => !r.set_id);
     const local = get('sc.attempts', []), seen = new Set(practice.map(r => r.client_id));
     const merged = practice.map(r => ({ id: r.client_id, sent: true, 날짜: r.solved_at, 문항: r.question_id, 고른답: r.picked, 맞음: r.correct, 초: r.seconds,
-      보기표시: (r.marks || {}).bogi || {}, 선지표시: (r.marks || {}).out || {}, 지운정답: !!(r.marks || {}).outCorrect }))
+      보기표시: (r.marks || {}).bogi || {}, 선지표시: (r.marks || {}).out || {}, 지운정답: !!(r.marks || {}).outCorrect,
+      까닭: (r.marks || {}).why || '', 찍음: !!(r.marks || {}).guess, 쉬움: (r.marks || {}).ease || '' }))
       .concat(local.filter(a => !seen.has(a.id)));
     merged.sort((a, b) => String(a['날짜']).localeCompare(String(b['날짜'])));
     put('sc.attempts', merged);

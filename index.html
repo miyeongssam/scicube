@@ -29,7 +29,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .top .in{max-width:1200px;margin:0 auto;height:56px;padding:0 16px;display:flex;align-items:center;gap:16px}
 .logo{font-size:20px;font-weight:700;color:var(--primary)}
 .crumb{font-size:15px;color:var(--sub)}
-.backb{font-size:22px;line-height:1;padding:4px 10px;border:1px solid var(--line);border-radius:8px;color:#444}   /* ‹ 뒤로 — 설치한 앱엔 브라우저 뒤로 단추가 없다(원장 11/05) */
+.ibtn{width:44px;height:44px;border:1px solid var(--line);border-radius:50%;display:inline-grid;place-items:center;color:#444;flex:none}   /* ← · 집 — 이름 없이 아이콘만(원장 11/10, 학원 앱과 같게) */
+.top .in{gap:8px}.top .logo{margin-left:8px}   /* ‹ 뒤로 — 설치한 앱엔 브라우저 뒤로 단추가 없다(원장 11/05) */
 body.athome .backb,.gate-on .backb{display:none}
 
 /* 본문 + 오른쪽 패널 */
@@ -286,10 +287,19 @@ body.done .after{display:block}
 .adrow{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid #E5E7EB}
 .adact{display:flex;gap:6px;align-items:center}
 .adno{width:120px;height:36px;margin:0;font-size:14px}
+/* 원장 11/10: 선지 줄 긋기(길게 누르기) · 틀린 까닭 · 다시 볼 때 · 분수 · 근호 · 첨자 */
+.ch{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.ch.struck .txt{text-decoration:line-through;color:var(--sub)}
+.why{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;font-weight:400}
+.why .sub{margin-right:2px}
+.chip.on:hover{color:#fff}
+.fr{display:inline-block;vertical-align:middle;text-align:center;line-height:1.2;margin:0 .12em}.fr>span{display:block;padding:0 .25em}.fr .nu{border-bottom:1px solid currentColor}
+.rt{display:inline-table;vertical-align:middle;border-collapse:collapse;margin:0 .1em}.rs{display:table-cell;vertical-align:top;padding:0}.rs svg{display:block;width:.75em;height:2.55em}.rs path{stroke:currentColor}.ri{display:table-cell;vertical-align:top;border-top:1.2px solid currentColor;padding:.05em .1em 0 0}.ri .fr{margin:0}
+sub,sup{font-size:.72em;line-height:0}sub{vertical-align:-.25em}sup{vertical-align:.5em}
 </style>
 </head>
 <body class="athome">
-<div class="top"><div class="in"><button class="backb" id="backB" title="뒤로" onclick="history.back()">‹</button><a class="logo" href="#/">사이큐브</a><span class="crumb"></span></div></div>
+<div class="top"><div class="in"><button class="ibtn backb" id="backB" title="뒤로" aria-label="뒤로" onclick="history.back()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button><a class="ibtn backb" href="#/" title="홈" aria-label="홈"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg></a><a class="logo" href="#/">사이큐브</a><span class="crumb"></span></div></div>
 <div class="layout">
   <div class="main"><div class="wrap" id="view"></div></div>
   <aside class="panel" id="panel"></aside>
@@ -297,10 +307,10 @@ body.done .after{display:block}
 <div id="gate" style="display:none"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="units.js?v=2"></script>
-<script src="sync.js?v=2"></script>
-<script src="exam.js?v=13"></script>
+<script src="sync.js?v=3"></script>
+<script src="exam.js?v=14"></script>
 <script src="install.js?v=1"></script>
-<script src="boot.js?v=14"></script>
+<script src="boot.js?v=15"></script>
 
 </body>
 </html>

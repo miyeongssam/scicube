@@ -770,17 +770,39 @@ document.addEventListener('keydown', ev => {
     return;
   }
   const done = document.body.classList.contains('done');
-  if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight'){ const a = navLink(ev.key === 'ArrowRight'); if (a){ location.hash = a.getAttribute('href'); ev.preventDefault(); } return; }
+  if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight'){ const a = navLink(ev.key === 'ArrowRight'); if (a){ goQ(a.getAttribute('href')); ev.preventDefault(); } return; }
   if (/^[1-5]$/.test(ev.key) && !done){ const c = view.querySelector(`.choices .ch[data-k="${ev.key}"]`); if (c){ c.click(); ev.preventDefault(); } return; }
   if (ev.key === 'Enter'){ const go = document.getElementById('go'); if (go && !go.disabled){ go.click(); ev.preventDefault(); return; }
-    if (done){ const a = navLink(true); if (a){ location.hash = a.getAttribute('href'); ev.preventDefault(); } } }
+    if (done){ const a = navLink(true); if (a){ goQ(a.getAttribute('href')); ev.preventDefault(); } } }
 });
 // 화면을 좌우로 밀면 이전 · 다음 문항(키보드 없는 태블릿 · U4). 메모 · 패널 · 표 · 번호표 · 그림 위에서는 움직이지 않는다
 let swX = 0, swY = 0, swT = 0, swOk = false;
-document.addEventListener('touchstart', e => { const p = e.touches[0]; swOk = e.touches.length === 1 && !e.target.closest('.panel, [contenteditable="true"], textarea, input, table, .exomr, .pal, .fig');
+document.addEventListener('touchstart', e => { const p = e.touches[0]; swOk = e.touches.length === 1 && p.clientX > 24 && p.clientX < innerWidth - 24 && !e.target.closest('.panel, [contenteditable="true"], textarea, input, table, .exomr, .pal');
   swX = p.clientX; swY = p.clientY; swT = Date.now(); }, {passive: true});
 document.addEventListener('touchend', e => { if (!swOk) return; const p = e.changedTouches[0], dx = p.clientX - swX, dy = p.clientY - swY;
-  if (Date.now() - swT < 700 && Math.abs(dx) > 70 && Math.abs(dy) < 50 && !String(getSelection())) document.dispatchEvent(new KeyboardEvent('keydown', {key: dx < 0 ? 'ArrowRight' : 'ArrowLeft', bubbles: true})); }, {passive: true});
+  if (Date.now() - swT < 800 && Math.abs(dx) > 60 && Math.abs(dy) < Math.max(60, Math.abs(dx) * 0.5) && !String(getSelection())) document.dispatchEvent(new KeyboardEvent('keydown', {key: dx < 0 ? 'ArrowRight' : 'ArrowLeft', bubbles: true})); }, {passive: true});
+// 문항 넘기기는 방문 기록을 쌓지 않고 바꿔 끼운다 — 「뒤로」 한 번이면 목록으로(2026-11-20, 학원앱_UI원칙 10장)
+// 화면 가장자리(24px)에서 시작한 밀기는 사파리 「뒤로」 몫이라 앱이 받지 않는다. 그림 위에서 밀어도 넘어간다.
+function goQ(href){ if (decodeURIComponent(location.hash).startsWith('#/문항/') && href.startsWith('#/문항/')) location.replace(href); else location.hash = href; }
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a[href^="#/문항/"]');
+  if (!a || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey) return;
+  if (decodeURIComponent(location.hash).startsWith('#/문항/')){ e.preventDefault(); location.replace(a.getAttribute('href')); }
+});
+// 문항 = 한 장: 그 문항 그림이 오면(최대 1.5초) 글자와 함께 한 번에 그린다. 앞뒤 문항 · 해설 그림은 미리 받아 둔다(9장)
+function showProblem(id){
+  const q = byId[id], h = location.hash, I = window.scImg;
+  if (!q || !I) return problem(id);
+  let drawn = false;
+  const sk = setTimeout(() => { if (!drawn) view.innerHTML = '<div class="skel"></div>'; }, 120);
+  I.ready(q['문제']).then(() => {
+    clearTimeout(sk); if (location.hash !== h) return; drawn = true;
+    try { problem(id); } catch (err) { view.innerHTML = `<h1>화면을 그리지 못했습니다</h1><pre style="white-space:pre-wrap;font-size:13px">${esc(String(err && (err.stack || err.message) || err))}</pre>`; return; }
+    I.size(view);
+    I.warm([q['해설'], q['보기해설'], q['더']].join(''));
+    view.querySelectorAll('a[href^="#/문항/"]').forEach(a => { const n = byId[decodeURIComponent(a.getAttribute('href')).slice('#/문항/'.length)]; if (n) I.warm(n['문제']); });
+  });
+}
 let firstRoute = true;
 let lastHash = location.hash;
 function route(){
@@ -799,7 +821,7 @@ function route(){
   try {
     sideNav();
     if (kind === '시험'){ document.body.classList.remove('done'); crumbSet('시험'); window.scExam(arg, p[3], p[4]); }
-    else if (kind === '문항') problem(arg);
+    else if (kind === '문항') showProblem(arg);
     else if (kind === '개념') concept(arg);
     else if (kind === '목록') home(arg);
     else if (kind === '과목'){ subjectV(arg, p[3], p[4]); if (arg && !SUBJ[arg]) notice('없는 과목이라 수능 통합과학을 보여 드립니다.'); }
@@ -819,3 +841,5 @@ window.scUI = { ICON, longPress, lpEat, loadSet, saveSet, openMemo, openComm, op
   panelOpen: (tab, html) => { panel.innerHTML = panelHead(tab) + html; wirePanel(); } };
 window.addEventListener('hashchange', route);
 route();
+// 앱을 열고 3초 뒤 모든 문항 그림을 천천히 받아 둔다(그림 90여 장 · 약 2MB, 한 번 받으면 sw.js가 기기에 담음)
+setTimeout(() => { if (window.scImg) Q.forEach(q => window.scImg.warm(q['문제'])); }, 3000);

@@ -7,6 +7,26 @@ const UNIT_ORDER = ['자연선택과진화', '생물다양성과보전'];
 const gate = document.getElementById('gate');
 const layout = document.querySelector('.layout');
 
+// 그림 미리 받기 · 크기 기억(2026-11-20, 학원앱_UI원칙 9장) — 문항을 넘길 때 그림이 늦게 끼어들어 선지가 밀리지 않게
+// warm(html): 그 글 속 그림을 미리 받아 둔다(받은 그림은 sw.js가 기기에 담아 둠). ready(html, ms): 그 그림이 다 오거나 ms가 지나면 끝.
+// size(root): 크기를 아는 그림에 width · height를 적어 오기 전에도 자리를 잡는다.
+window.scImg = (() => {
+  const dim = {}, wait = {};
+  const srcs = html => [...String(html || '').matchAll(/<img[^>]+src="([^"]+)"/g)].map(m => m[1].replace(/&amp;/g, '&')).filter(Boolean);
+  const one = src => wait[src] || (wait[src] = new Promise(res => {
+    const im = new Image(); im.decoding = 'async';
+    im.onload = () => { dim[src] = [im.naturalWidth, im.naturalHeight]; res(); };
+    im.onerror = () => { delete wait[src]; res(); };
+    im.src = src;
+  }));
+  const warm = html => srcs(html).forEach(one);
+  const ready = (html, ms = 1500) => Promise.race([Promise.all(srcs(html).map(one)), new Promise(r => setTimeout(r, ms))]);
+  const size = root => (root || document).querySelectorAll('img').forEach(i => {
+    const d = dim[i.getAttribute('src')]; if (d && !i.getAttribute('width')) { i.setAttribute('width', d[0]); i.setAttribute('height', d[1]); }
+  });
+  return { warm, ready, size };
+})();
+
 function showGate(html) { layout.style.display = 'none'; gate.style.display = 'block'; gate.innerHTML = `<div class="gatebox"><div class="gatelogo">사이큐브</div>${html}</div>`; }
 function inApp() { return /KAKAOTALK|Instagram|FBAN|FBAV|NAVER|Line\//i.test(navigator.userAgent); }
 
@@ -63,11 +83,17 @@ async function loadData() {
   // 그림: 비공개 저장소 → 잠깐 쓰는 주소로 바꾼다
   const htmls = live.flatMap(q => [q.stem_html, q.explain_html, q.bogi_html, q.more_html]).concat(cs.flatMap(c => c.sections.map(s => s.html)));
   const keys = [...new Set(htmls.flatMap(h => [...h.matchAll(/src="img\/([^"]+)"/g)].map(m => m[1])))];
+  // 임시 주소(24시간)는 기기에 적어 두고 다시 쓴다 — 앱을 열 때마다 주소가 바뀌면 같은 그림도 다시 받기 때문(2026-11-20)
+  const UK = 'sc.imgurl', now = Date.now();
+  let saved = {}; try { saved = JSON.parse(localStorage.getItem(UK) || '{}'); } catch (e) {}
   const urls = {};
-  if (keys.length) {
+  if (saved.until > now + 2 * 3600e3) keys.forEach(k => { if (saved.u && saved.u[k]) urls[k] = saved.u[k]; });
+  const need = keys.filter(k => !urls[k]);
+  if (need.length) {
     const { data, error } = await sb.storage.from('question-images').createSignedUrls(keys, 60 * 60 * 24);
     if (error) throw error;
     data.forEach(d => { if (d.signedUrl) urls[d.path] = d.signedUrl; });
+    try { localStorage.setItem(UK, JSON.stringify({ until: now + 24 * 3600e3, u: urls })); } catch (e) {}
   }
   const fix = h => h.replace(/src="img\/([^"]+)"/g, (m, k) => `src="${urls[k] || ''}"`);
   const rank = u => { const i = UNIT_ORDER.indexOf(u); return i < 0 ? 99 : i; };
@@ -163,7 +189,7 @@ async function adminScreen(msg) {
 function startApp(isAdmin) {
   gate.style.display = 'none'; layout.style.display = '';
   const s = document.createElement('script');
-  s.src = 'app.js?v=11';
+  s.src = 'app.js?v=12';
   window.scIsAdmin = isAdmin;
   document.body.appendChild(s);
   const top = document.querySelector('.top .in');

@@ -159,6 +159,8 @@
     if (x.submitted) { location.replace(`#/시험/${id}/답안지`); return; }
     if (retry) history.replaceState(null, '', `#/시험/${id}`);
     const fix = await signed(x.items.map(q => q.stem));
+    // 시험 그림을 처음에 모두 받아 두고, 첫 문항 그림은 오기를 잠깐(최대 1.5초) 기다린다(2026-11-20)
+    if (window.scImg) { x.items.forEach(q => window.scImg.warm(fix(q.stem))); await window.scImg.ready(fix((x.items[startAt || 0] || x.items[0]).stem)); }
     const akey = key(id, x.try), skey = akey + '.s';
     const d = x.draft || {}, ans = Object.assign({}, d.answers || {}, getJ(akey)), secs = Object.assign({}, d.seconds || {}, getJ(skey));
     const xkey = akey + '.x', strike = getJ(xkey);   // 줄 그은 선지 {문항: [번호…]} — 이 기기에만(원장 11/10 U6)
@@ -206,6 +208,7 @@
       document.getElementById('exTP').disabled = !cur;
       document.getElementById('exTX').disabled = last;
       paintBar();
+      if (window.scImg) window.scImg.size(P);
       window.scrollTo(0, 0);
     };
     v().querySelectorAll('#exO a').forEach(a => a.onclick = () => show(+a.dataset.i));

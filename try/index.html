@@ -270,6 +270,13 @@ body.done .after{display:block}
 .fch{border:1px solid #CCD6F0;background:#fff;border-radius:16px;padding:4px 12px;font-size:15px;cursor:pointer}.fch.on{background:#2F6BFF;color:#fff;border-color:#2F6BFF}
 .fcount{font-size:14px;color:#666;margin-top:4px}
 
+/* 수식 꼴(사이큐브 index.html 둘째 style) */
+.ch{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.ch.struck .txt{text-decoration:line-through;color:var(--sub)}
+.fr{display:inline-block;vertical-align:middle;text-align:center;line-height:1.2;margin:0 .12em}.fr>span{display:block;padding:0 .25em}.fr .nu{border-bottom:1px solid currentColor}
+.rt{display:inline-table;vertical-align:middle;border-collapse:collapse;margin:0 .1em}.rs{display:table-cell;vertical-align:top;padding:0}.rs svg{display:block;width:.75em;height:2.55em}.rs path{stroke:currentColor}.ri{display:table-cell;vertical-align:top;border-top:1.2px solid currentColor;padding:.05em .1em 0 0}.ri .fr{margin:0}
+sub,sup{font-size:.72em;line-height:0}sub{vertical-align:-.25em}sup{vertical-align:.5em}
+
 /* 교재 체험(로그인 없이 — 원장 2026-11-21). 사이큐브 화면 틀 그대로, 문항은 교재 그림 그대로 */
 .pick{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:16px}
 .pick .ch{justify-content:center;padding:8px}
@@ -290,7 +297,7 @@ details.orig summary{cursor:pointer;color:var(--primary);font-size:15px;font-wei
   <a class="logo" href="#" id="logoB">사이큐브</a><span class="crumb">교재 체험</span>
 </div></div>
 <div class="layout"><div class="main"><div class="wrap" id="view"></div></div></div>
-<script src="data.js?v=1"></script>
+<script src="data.js?v=202611210125"></script>
 <script>
 (function(){
 const T = window.TRY, C = ['', '①', '②', '③', '④', '⑤'];
@@ -302,7 +309,22 @@ function save(){ try { localStorage.setItem(KEY, JSON.stringify(st)); } catch(e)
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function math(t){   // 사이큐브 수식 꼴 — {{분자 | 분모}} 분수, _{ } 아래첨자, ^{ } 위첨자
   t = t.replace(/_\{([^{}]+)\}/g, '<sub>$1</sub>').replace(/\^\{([^{}]+)\}/g, '<sup>$1</sup>');
-  return t.replace(/\{\{\s*(√)?\s*([^|{}]+?)\|([^{}]+?)\}\}/g, (m, r, n, d) => `<span class="fr"><span class="nu">${n.trim()}</span><span class="de">${d.trim()}</span></span>`);
+  return t.replace(/\{\{\s*(√)?\s*([^|{}]+?)\|([^{}]+?)\}\}/g, (m, r, n, d) => {
+    const fr = `<span class="fr"><span class="nu">${n.trim()}</span><span class="de">${d.trim()}</span></span>`;
+    return r ? `<span class="rt"><span class="rs"><svg viewBox="0 0 12 40" preserveAspectRatio="none"><path d="M0.5 25 L3.5 22 L7 38.5 L11.6 0.6 L12 0.6" fill="none" stroke="#111" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg></span><span class="ri">${fr}</span></span>` : fr;
+  });
+}
+function tx(s){ return math(esc(s)).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); }
+function cardHTML(it, s){   // 사이큐브 문제 카드 꼴 — 글자 · 그림 조각 · 표 · <보기>(○✕ 칸)
+  const c = it.card, ox = s.ox || {};
+  return `<div class="stem">` + c.blocks.map(b => {
+    if (b.t === 'p') return `<p>${b.lines.map(tx).join('<br>')}</p>`;
+    if (b.t === 'box') return `<div class="bogi" style="padding-top:12px">${b.lines.map(tx).join('<br>')}</div>`;
+    if (b.t === 'fig') return `<div class="fig"><img src="img/${b.src}" alt="${esc(b.alt)}"${c.wh && c.wh[b.src] ? ` width="${c.wh[b.src][0]}" height="${c.wh[b.src][1]}" style="width:${c.wh[b.src][0]}px"` : ''}></div>`;
+    if (b.t === 'table') return `<div class="x"><table>${b.rows.map((r, k) => `<tr>${r.map(v => k === 0 ? `<th>${tx(v)}</th>` : `<td>${tx(v)}</td>`).join('')}</tr>`).join('')}</table></div>`;
+    if (b.t === 'bogi') return `<div class="bogi"><span class="bt">&lt;보 기&gt;</span>${c.bogi.map((l, k) => `<div class="bl" data-b="${k}"><span class="oxb ${ox[k] || ''}">${ox[k] === 'x' ? '✕' : ox[k] === 'o' ? '○' : ''}</span><span>${tx(l)}</span></div>`).join('')}</div>`;
+    return '';
+  }).join('') + `</div>` + (c.cimg ? `<div class="fig"><img src="img/${c.cimg}" alt="선지"${c.wh && c.wh[c.cimg] ? ` width="${c.wh[c.cimg][0]}" height="${c.wh[c.cimg][1]}" style="width:${c.wh[c.cimg][0]}px"` : ''}></div>` : '');
 }
 function solHTML(s){ return s.split(/\n+/).filter(x => x.trim()).map(x => `<p>${math(esc(x))}</p>`).join(''); }
 const view = document.getElementById('view');
@@ -335,13 +357,19 @@ function prob(i){
     <span>${i + 1} / ${n}</span>
     <button class="ic" id="nx" ${i === n - 1 ? 'disabled style="opacity:.3"' : ''} aria-label="다음 문항">›</button></div></div>
     <div class="bar2"><span class="badge v">${esc(U.subj)}</span><span class="badge">${esc(it.src)}</span></div>
-    <div class="fig"><img src="img/${it.qb}_q.png" width="${it.qw}" height="${it.qh}" alt="문항 ${i + 1}"></div>
-    <div class="pick">` + [1, 2, 3, 4, 5].map(c => {
+    ` + (it.card ? cardHTML(it, s) : `<div class="fig"><img src="img/${it.qb}_q.png" width="${it.qw}" height="${it.qh}" alt="문항 ${i + 1}"></div>`) +
+    (it.card && !it.card.cimg ? `<ul class="choices">` + it.card.choices.map((t, k) => {
+      const c = k + 1; let cl = 'ch';
+      if (s.done){ if (c === it.ans) cl += ' correct'; else if (c === s.pick) cl += ' mywrong'; }
+      else if (c === s.pick) cl += ' sel';
+      return `<li><button class="${cl}" data-c="${c}"><span class="num">${c}</span><span class="txt">${tx(t)}</span></button></li>`;
+    }).join('') + `</ul>` :
+    `<div class="pick">` + [1, 2, 3, 4, 5].map(c => {
       let cl = 'ch';
       if (s.done){ if (c === it.ans) cl += ' correct'; else if (c === s.pick) cl += ' mywrong'; }
       else if (c === s.pick) cl += ' sel';
       return `<button class="${cl}" data-c="${c}" aria-label="${c}번"><span class="num">${c}</span></button>`;
-    }).join('') + `</div>`;
+    }).join('') + `</div>`);
   if (!s.done) h += `<div class="check"><button class="btn btn-p" id="ck" ${s.pick ? '' : 'disabled'}>정답 확인</button></div>`;
   else {
     const ok = s.pick === it.ans;
@@ -357,7 +385,11 @@ function render(){
   view.innerHTML = i < 0 ? list() : prob(i);
   if (i < 0){ document.body.classList.remove('done'); const r = document.getElementById('resetAll'); if (r) r.onclick = () => { st = {}; save(); render(); }; return; }
   const it = U.items[i];
-  view.querySelectorAll('.pick .ch').forEach(b => b.onclick = () => pick(+b.dataset.c));
+  view.querySelectorAll('.pick .ch, .choices .ch').forEach(b => b.onclick = () => pick(+b.dataset.c));
+  view.querySelectorAll('.bl').forEach(b => b.onclick = () => {   // 보기 칸: 누를 때마다 ✕ → ○ → 빈칸(사이큐브와 같음)
+    const s = st[it.qb] || (st[it.qb] = {}); if (s.done) return; s.ox = s.ox || {}; const k = b.dataset.b;
+    s.ox[k] = s.ox[k] === 'x' ? 'o' : s.ox[k] === 'o' ? '' : 'x'; save(); render();
+  });
   const on = (id, f) => { const e = document.getElementById(id); if (e) e.onclick = f; };
   on('pv', () => go(i - 1)); on('nx', () => go(i + 1)); on('nx2', () => go(i + 1)); on('toList', () => go(-1));
   on('ck', check); on('again', () => { delete st[it.qb]; save(); render(); });
